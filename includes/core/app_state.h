@@ -1,0 +1,22 @@
+#pragma once
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_video.h>
+
+#include <string>
+
+namespace core
+{
+    struct AppState
+    {
+        SDL_Window* window = nullptr;
+
+        std::string name = "Renderer";
+        int width = 1920;
+        int height = 1080;
+
+        int viewportWidth = 1920;
+        int viewportHeight = 1080;
+
+        SDL_GLContext glContext = nullptr;
+    };
+}
