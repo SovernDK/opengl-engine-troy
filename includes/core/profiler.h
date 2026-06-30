@@ -10,7 +10,8 @@
 
 namespace core
 {
-	struct MemoryStats {
+	struct MemoryStats
+	{
 		float workingSetMB;   // Physical RAM in use
 		float privateBytesMB; // Total committed (matches VS ~closely)
 	};
@@ -18,9 +19,26 @@ namespace core
 	// Can be extended to keep data for longer time and output it into file at the end of session
 	class Profiler
 	{
-	public:
+	private:
+		Profiler() = default;
 
-		static Profiler& Instance()
+		MemoryStats memStats;
+
+		Timer timer = Timer(1.0f);
+
+		float deltaTime = 0;
+		float memMB = 0;
+		float elapsedTime = 0;
+
+		Uint64 last = SDL_GetPerformanceCounter();
+		Uint64 frames = 0;
+		Uint64 fps = 0;
+		Uint64 drawCalls;
+	public:
+		size_t frameBufferUsed = 0;
+		size_t frameBufferCap = 0;
+	public:
+		static Profiler& instance()
 		{
 			static Profiler instance;
 			return instance;
@@ -53,6 +71,8 @@ namespace core
 
 			size_t memBytesEx = GetMemoryUsageBytesEx();
 			memStats.privateBytesMB = memBytesEx / (1024.0f * 1024.0f);
+
+			elapsedTime += deltaTime;
 		}
 
 		void setDrawCalls(Uint64 value)
@@ -75,13 +95,16 @@ namespace core
 			return deltaTime;
 		}
 
+		float getElapsedTime() const
+		{
+			return elapsedTime;
+		}
+
 		MemoryStats getMemoryStats()
 		{
 			return memStats;
 		}
 	private:
-		Profiler() = default;
-
 		size_t GetMemoryUsageBytes()
 		{
 #if defined(_WIN32)
@@ -89,7 +112,6 @@ namespace core
 			GetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info));
 			return info.WorkingSetSize;
 #else
-			// fallback for now
 			return 0;
 #endif
 		}
@@ -104,17 +126,5 @@ namespace core
 			return 0;
 #endif
 		}
-
-		MemoryStats memStats;
-
-		Timer timer = Timer(1.0f);
-
-		float deltaTime = 0;
-		float memMB = 0;
-
-		Uint64 last = SDL_GetPerformanceCounter();
-		Uint64 frames = 0;
-		Uint64 fps = 0;
-		Uint64 drawCalls;
 	};
 }

@@ -2,47 +2,61 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_keyboard.h>
 
-#include <flecs.h>
 #include <memory>
 
+#include "core/game_flow_fsm.h"
 #include "core/app_state.h"
-#include "graphics/camera.h"
+#include "core/context.h"
+
+#include "graphics/camera/camera.h"
+#include "services/scene_service.h"
+#include "services/scene.h"
+
+#include "ecs/ecs.h"
+#include "editor/editor.h"
+
+class Arena;
 
 namespace core
 {
-	class Game
+	class Game : public IContext
 	{
-	private:
-		int screenWidth		= 0,
-			screenHeight	= 0;
+	public:
+		int screenWidth = 0,
+			screenHeight = 0;
 
-		int viewportWidth	= 0,
-			viewportHeight	= 0;
+		int viewportWidth = 0,
+			viewportHeight = 0;
 
-		flecs::world world;
+		std::unique_ptr<ecs::ECSWorld>	world = nullptr;
+		std::unique_ptr<ICamera>		mainCam = nullptr;
+		std::unique_ptr<GameFlowFSM>	gameFlowFsm = nullptr;
+		std::unique_ptr<editor::Editor> editor = nullptr;
 
-		std::unique_ptr<Camera>	mainCam;
-
-		const bool* keys = SDL_GetKeyboardState(nullptr);
+		Arena* arena;
 	public:
 		Game() = default;
 		Game(int width, int height)
 		{
-			this->viewportWidth	 = width;
+			this->viewportWidth = width;
 			this->viewportHeight = height;
 
-			this->screenWidth	= width;
-			this->screenHeight	= height;
+			this->screenWidth = width;
+			this->screenHeight = height;
 		}
 
 		void init(AppState& state);
-		void update(float dt);
+		void update(float dt) const;
 		void input(SDL_Event& e, float dt);
-		void draw();
-		void quit();
+		void draw() const;
+		void quit() const;
 
-		const flecs::world getWorld() { return world; }
+		void resize(int viewportWidth, int viewportHeight);
 
-		Camera& getMainCam()	{ return *mainCam; }
+		const ecs::ECSWorld& getWorld() { return *world; }
+		glm::vec2 getScreenDim() const { return glm::vec2(this->screenWidth, this->screenHeight); }
+		glm::vec2 getViewport() const { return glm::vec2(this->viewportWidth, this->viewportHeight); }
+
+		ICamera& getMainCam() { return *mainCam.get(); }
 	};
 }

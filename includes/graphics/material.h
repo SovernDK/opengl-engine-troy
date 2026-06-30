@@ -1,97 +1,62 @@
 #pragma once
-#include "graphics/shader_program.h"
-#include "graphics/texture.h"
-#include "ecs/components.h"
+#include <memory>
+#include <unordered_map>
+#include <variant>
+#include <vector>
+#include <string>
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include "graphics/texture.h"
+
+#include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+
+class ShaderProgram;
+class Texture2D;
+
+using Uniform = std::variant<bool, float, int, glm::vec2, glm::vec3, glm::vec4, glm::mat4>;
 
 enum class BlendMode
 {
-    None,
-    Alpha,
-    Additive
+	None,
+	Alpha,
+	Additive
 };
 
 class Material
 {
 public:
-    Material(ShaderProgram* shader)
-    {
-        this->shader = shader;
-    }
-    
-    void setModel(const glm::mat4& model)
-    {
-        this->model = model;
-    }
+	std::shared_ptr<ShaderProgram> shader;
+public:
+	Material(std::shared_ptr<ShaderProgram> shader);
+	~Material();
+};
 
-    void setProjection(const glm::mat4& projection)
-    {
-        this->projection = projection;
-    }
-
-    void setTexture(Texture2D* texture)
-    {
-        this->texture = texture;
-    }
-
-    void setColor(const glm::vec4& color)
-    {
-        this->color = color;
-    }
-
-    void setUvScale(glm::vec2 scale)
-    {
-        this->uvScale = scale;
-    }
-
-    void setUVOffset(glm::vec2 offset)
-    {
-        this->uvOffset = offset;
-    }
-
-    void setBlendMode(BlendMode blend)
-    {
-        this->blendMode = blend;
-    }
-
-    void activate() const
-    {
-        shader->use();
-    }
-
-    void bind() const
-    {
-        shader->setVec4("vertexColor", color);
-        shader->setMat4("projection", projection);
-        shader->setMat4("model", model);
-        
-        if (texture)
-        {
-            shader->setBool("useTexture", true);
-            texture->bind(0);
-            shader->setInt("image", 0);
-
-            shader->setVec2("uvOffset", uvOffset);
-            shader->setVec2("uvScale", uvScale);
-        }
-        else
-        {
-            shader->setBool("useTexture", false);
-        }
-    }
-
-    BlendMode getBlend() const { return blendMode; }
-    ShaderProgram* getShader() const { return shader; }
-
+//Rewrite to interface and concrete class per material since there will be limited amount of properties to handle and 
+//concrete classes will take less space and will be more performant then this
+class MaterialInstance
+{
+public:
+	std::shared_ptr<Material> base;
+	BlendMode blendMode = BlendMode::None;
 private:
-    ShaderProgram* shader   = nullptr;
-    glm::mat4 model         = glm::mat4(1);
-    glm::mat4 projection    = glm::mat4(1);
-    glm::vec2 uvOffset      = glm::vec2(0);
-    glm::vec2 uvScale       = glm::vec2(0);
-    glm::vec4 color         = glm::vec4(1.0f);
-    Texture2D* texture      = nullptr;
-    BlendMode blendMode     = BlendMode::None;
+	//Change to vectors (less memory, cache friendly)
+	//Also remove shared ptr and use copies of Tex2D since its only 12 bytes and better performance then shared pointer
+	struct TextureSlot { std::string name; GLuint texId; };
+	std::vector<TextureSlot> textures;
+
+	struct PropertySlot { std::string name; Uniform uniform; };
+	std::vector<PropertySlot> properties;
+public:
+	MaterialInstance(std::shared_ptr<Material> shader) : base(shader) {};
+	~MaterialInstance();
+
+	//Change to texture objects
+	void setTexture(const std::string& name, GLuint id);
+	void setTexture(const std::string& name, TexID id);
+	void addProperty(const std::string& name, Uniform value);
+	void clearProperties();
+	void setProperty(const std::string& name, Uniform value);
+
+	void bind() const;
+	void unbind() const;
 };

@@ -59,7 +59,7 @@ namespace file_util
 		return cached;
 	}
 
-	inline fs::path getPath(const std::string& relative)
+	inline fs::path createPath(const std::string& relative)
 	{
 		const char* basePath = SDL_GetBasePath();
 		if (!basePath)
@@ -72,7 +72,7 @@ namespace file_util
 	}
 
 	template<typename... Args>
-	inline fs::path getPath(Args&&... parts)
+	inline fs::path createPath(Args&&... parts)
 	{
 		fs::path result = getBasePath();
 

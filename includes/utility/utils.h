@@ -6,8 +6,11 @@
 #include <ext/scalar_constants.hpp>
 #include <random>
 #include <optional>
+#include <string>
 
-namespace vector {
+#define HexToRGBA(hex, alpha) color::HexToRGB(hex, alpha)
+
+namespace util_vec {
     inline bool equal(glm::vec2 a, glm::vec2 b)
     {
         return glm::distance(a, b) < glm::epsilon<float>();
@@ -83,6 +86,16 @@ namespace text
             result.emplace_back(text.begin() + start, text.end());
         return result;
     }
+
+    inline std::string toLower(std::string& text)
+    {
+        for (auto& c : text)
+        {
+            c = std::tolower(c);
+        }
+
+        return text;
+    }
 }
 
 namespace color
@@ -95,6 +108,35 @@ namespace color
             static_cast<uint8_t>(a.b + t * (b.b - a.b)),
             static_cast<uint8_t>(a.a + t * (b.a - a.a))
         };
+    }
+
+    inline SDL_Color HexToRGB(const std::string& hex, uint8_t alpha)
+    {
+        std::string s = hex;
+
+        if (s[0] == '#')
+            s = s.substr(1);
+
+        if (s.length() != 6)
+            throw std::runtime_error("Invalid hex color");
+
+        SDL_Color c;
+        c.r = static_cast<uint8_t>(std::stoi(s.substr(0, 2), nullptr, 16));
+        c.g = static_cast<uint8_t>(std::stoi(s.substr(2, 2), nullptr, 16));
+        c.b = static_cast<uint8_t>(std::stoi(s.substr(4, 2), nullptr, 16));
+        c.a = alpha;
+
+        return c;
+    }
+
+    inline glm::vec4 SDLColorToVec4(SDL_Color color)
+    {
+        return glm::vec4(
+            	color.r / 255.0f,
+            	color.g / 255.0f,
+            	color.b / 255.0f,
+            	color.a / 255.0f
+            );
     }
 }
 
@@ -112,5 +154,20 @@ namespace utils
             return 0.0f;
         }
         return (value - min) / (max - min);
+    }
+
+    inline void packFloatToRGBA(float value, uint8_t* out)
+    {
+        glm::vec4 enc = glm::vec4(1.0f, 255.0f, 65025.0f, 16581375.0f) * value;
+        enc = glm::fract(enc); // keep fractional part of each component
+        // subtract bleed from higher channels into lower ones
+        enc.x -= enc.y * (1.0f / 255.0f);
+        enc.y -= enc.z * (1.0f / 255.0f);
+        enc.z -= enc.w * (1.0f / 255.0f);
+
+        out[0] = (uint8_t)std::round(enc.x * 255.0f);
+        out[1] = (uint8_t)std::round(enc.y * 255.0f);
+        out[2] = (uint8_t)std::round(enc.z * 255.0f);
+        out[3] = (uint8_t)std::round(enc.w * 255.0f);
     }
 }

@@ -3,29 +3,33 @@
 #include "core/resources.h"
 #include "core/config.h"
 
+#include "services/service_locator.h"
+#include "services/file_service.h"
+#include "services/log_service.h"
+
 using namespace std;
 using namespace core;
 
 unordered_map<string, Font>                      Resources::fonts;
-unordered_map<string, unique_ptr<ShaderProgram>> Resources::shaders;
+unordered_map<string, shared_ptr<ShaderProgram>> Resources::shaders;
 unordered_map<string, unique_ptr<Texture2D>>     Resources::textures;
-unordered_map<string, unique_ptr<Material>>      Resources::materials;
+unordered_map<string, shared_ptr<Material>>      Resources::sharedMaterials;
 
-ShaderProgram* Resources::loadShader(const string& vertex, const string& fragment, string name)
+std::weak_ptr<ShaderProgram> Resources::loadShader(const string& vertex, const string& fragment, string name)
 {
-    if (shaders.count(name))
-    {
-        return shaders[name].get();
-    }
-
-    unique_ptr<ShaderProgram> shaderProgram = make_unique<ShaderProgram>();
+    std::shared_ptr<ShaderProgram> shaderProgram = std::make_shared<ShaderProgram>();
     Shader fShader, vShader;
 
+    #ifdef _DEBUG
+    const std::string vertexPath = std::format("{}shaders/{}", PROJECT_ROOT_DIR, vertex);
+    const std::string fragmentPath = std::format("{}shaders/{}", PROJECT_ROOT_DIR, fragment);
+    #else
     const std::string vertexPath = file_util::getPath(GConfig.getShadersPath(), vertex).string();
     const std::string fragmentPath = file_util::getPath(GConfig.getShadersPath(), fragment).string();
+    #endif
 
-    fShader.FromFile(fragmentPath, GL_FRAGMENT_SHADER);
-    vShader.FromFile(vertexPath, GL_VERTEX_SHADER);
+    fShader.FromFile(fragmentPath,  GL_FRAGMENT_SHADER);
+    vShader.FromFile(vertexPath,    GL_VERTEX_SHADER);
 
     shaderProgram->init();
     shaderProgram->attach(fShader);
@@ -36,78 +40,218 @@ ShaderProgram* Resources::loadShader(const string& vertex, const string& fragmen
     vShader.destroy();
 
     shaders[name] = move(shaderProgram);
-    return shaders[name].get();
+    return std::weak_ptr<ShaderProgram>(shaders[name]);
 }
 
-ShaderProgram* Resources::loadShader(const string& name)
+std::weak_ptr<ShaderProgram> Resources::loadShader(const string& name)
 {
-    if (shaders.count(name))
+    if (shaders.contains(name))
     {
-        return shaders[name].get();
+        return shaders[name];
     }
 
-    SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Couldn't find shader with handle %s", name.c_str());
-    return nullptr;
+    ServiceLocator::get<ILogger>()->error(std::format("Couldn't find shader with handle {}", name.c_str()));
+    return std::weak_ptr<ShaderProgram>();
 }
 
-Texture2D* Resources::saveTexture(const Texture2D& texture, std::string name)
+std::shared_ptr<ShaderProgram> Resources::getStrPtrShader(const string& name)
 {
-    unique_ptr<Texture2D> tex = make_unique<Texture2D>(texture);
-    textures[name] = move(tex);
+    if (shaders.contains(name))
+    {
+        return shaders[name];
+    }
+
+    ServiceLocator::get<ILogger>()->error(std::format("Couldn't find shader with handle {}", name.c_str()));
+    return std::shared_ptr<ShaderProgram>();
+}
+
+Texture2D* Resources::saveTexture(Texture2D&& texture, std::string name)
+{
+    textures[name] = std::make_unique<Texture2D>(std::move(texture));
     return textures[name].get();
 }
 
 Texture2D* Resources::loadTexture(const fs::path& path, string name)
 {
-    if (textures.count(name))
+    StbiImage img = ServiceLocator::get<IFileService>()->loadFile(path.string(), (int) STBI_rgb_alpha);
+
+    if (!img.check)
     {
-        return textures[name].get();
+        return nullptr;
     }
 
-    unique_ptr<Texture2D> texture = make_unique<Texture2D>();
+    Texture2D texture = TextureBuilder()
+        .setFiltering(GL_NEAREST)
+        .setMipMap(GL_NEAREST_MIPMAP_LINEAR)
+		.setWrapping(GL_REPEAT)
+		.setWrapAxis(true, true)
+        .setBorderColor(0, 0, 0)
+		.build(img.width, img.height, img.channels, img.data);
 
-    texture->load(path.string());
-    texture->setFiltering(GL_NEAREST);
-    texture->setWrapping(GL_MIRRORED_REPEAT);
-    texture->setWrapAxis(true, true);
-    texture->setBorderColor(0, 0, 0);
-
-    textures[name] = move(texture);
+    ServiceLocator::get<ILogger>()->log(std::format("Loaded texture with handle {}", name.c_str()));
+    textures[name] = std::make_unique<Texture2D>(std::move(texture));
     return textures[name].get();
 }
 
-Texture2D* Resources::loadTexture(const string& name)
+Texture2D* Resources::texture(const string& name)
 {
-    if (textures.count(name))
+    if (textures.contains(name))
     {
         return textures[name].get();
     }
 
-    SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Couldn't find texture with handle %s", name.c_str());
-    return nullptr;
+    ServiceLocator::get<ILogger>()->error(std::format("Couldn't find texture with handle {}", name.c_str()));
+    return textures["default"].get();
 }
 
-Material* Resources::createMaterial(ShaderProgram& shader, string handle)
+Texture2D* Resources::texture(TexID id)
 {
-    materials[handle] = make_unique<Material>(&shader);
-    return materials[handle].get();
+	std::find_if(textures.begin(), textures.end(), [&](auto& p)
+	{
+		return p.second->id.id == id.id;
+	});
+
+	ServiceLocator::get<ILogger>()->error(std::format("Couldn't find texture with id {}", id.id));
+	return textures["default"].get();
 }
 
-Material* Resources::getMaterial(const string& handle)
+bool Resources::loadTTFont(const fs::path path, float fontSize)
 {
-    if (materials.count(handle))
+    string fontName = file_util::getNameFromPath(path);
+	
+	if (!fs::exists(path))
+	{
+        std::string msg = std::format("Font file does not exist: {}", path.string().c_str());
+        ServiceLocator::get<ILogger>()->error(CategoryLevel::TTFFont, msg);
+		return false;
+	}
+
+	FT_Library ft;
+	if (FT_Init_FreeType(&ft))
+	{
+        std::string msg = "ERROR::FREETYPE: Could not init FreeType Library";
+		ServiceLocator::get<ILogger>()->error(CategoryLevel::TTFFont, msg);
+		return false;
+	}
+
+	FT_Face face;
+	FT_Error err = FT_New_Face(ft, path.string().c_str(), 0, &face);
+	if (err)
+	{
+		std::string msg = std::format(
+			"ERROR::FREETYPE: Failed to load font ({} - size: {}) from: {} [FT error: {}]",
+			fontName, fontSize, path.string(), err);
+        ServiceLocator::get<ILogger>()->error(CategoryLevel::TTFFont, msg);
+		return false;
+	}
+	FT_Set_Pixel_Sizes(face, 0, fontSize);
+
+	FT_Error err2 = FT_Load_Char(face, 'X', FT_LOAD_RENDER);
+	if (err2)
+	{
+        std::string msg = std::format("ERROR::FREETYPE: Failed to load Glyph ({} - size: {}) from: {}  [FT error: {}]",
+            fontName.c_str(), fontSize, path.string().c_str(), err2);
+		ServiceLocator::get<ILogger>()->error(CategoryLevel::TTFFont, msg);
+		return false;
+	}
+
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // disable byte-alignment restriction
+
+    int atlasWidth = 0;
+    int atlasHeight = 0;
+
+    for (unsigned char c = 0; c < 128; c++)
     {
-        return materials[handle].get();
+		if (FT_Load_Char(face, c, FT_LOAD_RENDER))
+		{
+			std::cout << "ERROR::FREETYTPE: Failed to load Glyph" << std::endl;
+			continue;
+		}
+
+		auto& glyph = face->glyph;
+		auto& bmp = face->glyph->bitmap;
+
+		glm::vec2 glyphSize = glm::vec2(bmp.width, bmp.rows);
+		glm::vec2 bearing = glm::vec2(glyph->bitmap_left, glyph->bitmap_top);
+		int advance = glyph->advance.x;
+
+		fonts[fontName]._glyphs[c] = Glyph(glyphSize, bearing, advance);
+
+		atlasWidth += bmp.width;
+		atlasHeight = std::max(atlasHeight, (int)bmp.rows);
     }
 
-    SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Couldn't find material with handle %s", handle.c_str());
-    return nullptr;
+    auto bufferSize = atlasWidth * atlasHeight;
+	unsigned char* buffer = new unsigned char[bufferSize]();
+
+	// pack glyphs
+	int xOffset = 0;
+	for (unsigned char c = 0; c < 128; c++)
+	{
+		if (FT_Load_Char(face, c, FT_LOAD_RENDER)) continue;
+		auto& bmp = face->glyph->bitmap;
+
+		for (unsigned int row = 0; row < bmp.rows; row++)
+		{
+			auto dst = row * atlasWidth + xOffset;
+			auto src = row * bmp.width;
+
+			memcpy(buffer + dst, bmp.buffer + src, bmp.width);
+		}
+
+		fonts[fontName]._glyphs[c].uvs.u0 = (float)xOffset / (float)atlasWidth;
+		fonts[fontName]._glyphs[c].uvs.u1 = (float)(xOffset + bmp.width) / (float)atlasWidth;
+		fonts[fontName]._glyphs[c].uvs.v0 = 0.0f;
+		fonts[fontName]._glyphs[c].uvs.v1 = (float)bmp.rows / (float)atlasHeight;
+
+		xOffset += bmp.width;
+	}
+
+    Texture2D glyphTexture = TextureBuilder()
+		.setFormat(GL_RED)
+		.setInternalFormat(GL_RED)
+        .setFiltering(GL_LINEAR)
+        .setMipMap(GL_LINEAR)
+        .setWrapping(GL_CLAMP_TO_EDGE)
+        .build(atlasWidth, atlasHeight, buffer);
+
+    auto atlasTextureName = fontName + "_" + std::to_string(fontSize);
+	fonts[fontName].atlasId = glyphTexture.id;
+	saveTexture(std::move(glyphTexture), atlasTextureName);
+
+    ServiceLocator::get<ILogger>()->log(CategoryLevel::TTFFont, std::format("Font {} loaded succesfully", fontName).c_str());
+    delete[] buffer;
 }
 
-void Resources::clear()
+Font* Resources::font(const std::string& fontName)
 {
-    for (auto& [name, font] : fonts)
+    if (!fonts.contains(fontName))
     {
-        font.clear();
+        std::string msg = std::format("Font \"{}\" doesn't exist!", fontName).c_str();
+		ServiceLocator::get<ILogger>()->log(CategoryLevel::TTFFont, msg);
+		return &fonts["default"];
     }
+    return &fonts[fontName];
 }
+
+void Resources::addSharedMat(const std::string& handle, std::shared_ptr<Material> material)
+{
+    sharedMaterials[handle] = material;
+}
+
+std::shared_ptr<Material> Resources::sharedMat(const std::string& handle)
+{
+    if (sharedMaterials.contains(handle))
+    {
+        return sharedMaterials[handle];
+    }
+
+    return std::shared_ptr<Material>();
+}
+
+Material Resources::copySharedMat(const std::string& handle)
+{
+    return *sharedMaterials.at(handle).get();
+}
+
+void Resources::quit() { }

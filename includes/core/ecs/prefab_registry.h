@@ -1,15 +1,14 @@
 #pragma once
-#include <flecs.h>
 #include <string>
 #include <unordered_map>
 
 class PrefabRegistry
 {
 private:
-	static inline std::unordered_map<std::string, flecs::entity> prefabs;
+	//static inline std::unordered_map<std::string, flecs::entity> prefabs;
 public:
 	
-	static inline void registerPrefab(std::string key, flecs::entity prefab)
+	/*static inline void registerPrefab(std::string key, flecs::entity prefab)
 	{
 		prefabs[key] = prefab;
 	}
@@ -31,5 +30,5 @@ public:
 			SDL_Log("Prefab with key '%s' not found in registry.", key.c_str());
 			return flecs::entity();
 		}
-	}
+	}*/
 };

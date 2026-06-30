@@ -1,0 +1,16 @@
+{
+    "inputs": {
+        "accept": [
+            {
+                "device": "mouse",
+                "key": "left",
+                "event": "down"
+            },
+            {
+                "device": "keyboard",
+                "key": "return",
+                "event": "up"
+            }
+        ]
+    }
+}

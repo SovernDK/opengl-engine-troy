@@ -7,6 +7,7 @@ class Shader
 public:
     Shader() = default;
     ~Shader();
+
     Shader(const Shader&) = delete;
     Shader& operator=(const Shader&) = delete;
 

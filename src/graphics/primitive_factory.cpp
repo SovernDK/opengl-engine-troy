@@ -11,9 +11,9 @@ using namespace glm;
 Primitive PrimitiveFactory::createTriangle()
 {
     vector<Vertex> verts = {
-        { { 0.0f,  0.5f, 0.0f }, {1.0, 1.0, 1.0}, { 0.5f, 1.0f } },
-        { {-0.5f, -0.5f, 0.0f }, {1.0, 1.0, 1.0}, { 0.5f, 1.0f } },
-        { { 0.5f, -0.5f, 0.0f }, {1.0, 1.0, 1.0}, { 0.5f, 1.0f } },
+        { { 0.0f,  0.5f, 0.0f }, { 0.5f, 1.0f } },
+        { {-0.5f, -0.5f, 0.0f }, { 0.5f, 1.0f } },
+        { { 0.5f, -0.5f, 0.0f }, { 0.5f, 1.0f } },
     };
 
     std::vector<GLuint> indices = {
@@ -26,8 +26,8 @@ Primitive PrimitiveFactory::createTriangle()
 Primitive PrimitiveFactory::createLine()
 {
     vector<Vertex> verts = {
-        { { 0.0f,  0.0f, 0.0f }, {1,1,1}, {0.0f, 0.0f} },
-        { { 1.0f,  1.0f, 0.0f }, {1,1,1}, {0.0f, 0.0f} }, 
+        { { 0.0f,  0.0f, 0.0f }, {0.0f, 0.0f} },
+        { { 1.0f,  1.0f, 0.0f }, {0.0f, 0.0f} }, 
     };
 
     vector<GLuint> indices = {
@@ -37,17 +37,11 @@ Primitive PrimitiveFactory::createLine()
     return { verts, indices };
 }
 
-Primitive PrimitiveFactory::createLine(vec2 start, vec2 end, SDL_Color c)
+Primitive PrimitiveFactory::createLine(vec2 start, vec2 end)
 {
-    glm::vec3 color = {
-        (float)c.r,
-        (float)c.g,
-        (float)c.b
-    };
-
     vector<Vertex> verts = {
-        { { start.x, start.y, 0.0f }, color, {0.0f, 0.0f} },
-        { { end.x,   end.y,   0.0f }, color, {0.0f, 0.0f} },
+        { { start.x, start.y, 0.0f }, {0.0f, 0.0f} },
+        { { end.x,   end.y,   0.0f }, {0.0f, 0.0f} },
     };
 
     vector<GLuint> indices = {
@@ -60,10 +54,10 @@ Primitive PrimitiveFactory::createLine(vec2 start, vec2 end, SDL_Color c)
 Primitive PrimitiveFactory::createRect()
 {
     vector<Vertex> verts = {
-        { { 0.0f, 1.0f, 0.0f }, {1,1,1}, {0.0f, 1.0f} }, // top-left
-        { { 1.0f, 1.0f, 0.0f }, {1,1,1}, {1.0f, 1.0f} }, // top-right
-        { { 1.0f, 0.0f, 0.0f }, {1,1,1}, {1.0f, 0.0f} }, // bottom-right
-        { { 0.0f, 0.0f, 0.0f }, {1,1,1}, {0.0f, 0.0f} }, // bottom-left
+        { { 0.0f, 1.0f, 0.0f }, {0.0f, 1.0f} }, // top-left
+        { { 1.0f, 1.0f, 0.0f }, {1.0f, 1.0f} }, // top-right
+        { { 1.0f, 0.0f, 0.0f }, {1.0f, 0.0f} }, // bottom-right
+        { { 0.0f, 0.0f, 0.0f }, {0.0f, 0.0f} }, // bottom-left
     };
 
     vector<GLuint> indices = {
@@ -73,24 +67,18 @@ Primitive PrimitiveFactory::createRect()
     return { verts, indices };
 }
 
-Primitive PrimitiveFactory::createRect(glm::vec2 origin, glm::vec2 size, SDL_Color c)
+Primitive PrimitiveFactory::createRect(glm::vec2 origin, glm::vec2 size)
 {
-    glm::vec3 color = {
-        (float)c.r,
-        (float)c.g,
-        (float)c.b
-    };
-
     float x = origin.x;
     float y = origin.y;
     float w = size.x;
     float h = size.y;
 
     vector<Vertex> verts = {
-        { { x,     y,       0.0f }, color, {0.0f, 1.0f} }, // top-left
-        { { x + w, y,       0.0f }, color, {1.0f, 1.0f} }, // top-right
-        { { x + w, y + h,   0.0f }, color, {1.0f, 0.0f} }, // bottom-right
-        { { x,     y + h,   0.0f }, color, {0.0f, 0.0f} }, // bottom-left
+        { { x,     y,       0.0f }, {0.0f, 1.0f} }, // top-left
+        { { x + w, y,       0.0f }, {1.0f, 1.0f} }, // top-right
+        { { x + w, y + h,   0.0f }, {1.0f, 0.0f} }, // bottom-right
+        { { x,     y + h,   0.0f }, {0.0f, 0.0f} }, // bottom-left
     };
 
     vector<GLuint> indices = {
@@ -102,12 +90,12 @@ Primitive PrimitiveFactory::createRect(glm::vec2 origin, glm::vec2 size, SDL_Col
 
 Primitive PrimitiveFactory::createQuad()
 {
-    vector<Vertex> verts = {
-        { { 0.0f,  1.0f, 0.0f }, {1,1,1}, {0.0f, 1.0f} }, // 0 - top-left
-        { { 1.0f,  1.0f, 0.0f }, {1,1,1}, {1.0f, 1.0f} }, // 1 - top-right
-        { { 1.0f,  0.0f, 0.0f }, {1,1,1}, {1.0f, 0.0f} }, // 2 - bottom-right
-        { { 0.0f,  0.0f, 0.0f }, {1,1,1}, {0.0f, 0.0f} }, // 3 - bottom-left
-    };
+	vector<Vertex> verts = {
+		{ { 0.0f, 1.0f, 0.0f }, {0.0f, 1.0f} }, // 0 - top-left
+		{ { 1.0f, 1.0f, 0.0f }, {1.0f, 1.0f} }, // 1 - top-right
+		{ { 1.0f, 0.0f, 0.0f }, {1.0f, 0.0f} }, // 2 - bottom-right
+		{ { 0.0f, 0.0f, 0.0f }, {0.0f, 0.0f} }, // 3 - bottom-left
+	};
 
     vector<GLuint> indices = {
         0, 1, 3,   // first triangle
@@ -120,16 +108,56 @@ Primitive PrimitiveFactory::createQuad()
 Primitive PrimitiveFactory::createQuad(vec2 topLeft, vec2 topRight, vec2 botRight, vec2 botLeft)
 {
     vector<Vertex> verts = {
-        { { topLeft.x,  topLeft.y,  1.0f }, {1,1,1}, {0.0f, 1.0f} }, // 0 - top-left
-        { { topRight.x, topRight.y, 1.0f }, {1,1,1}, {1.0f, 1.0f} }, // 1 - top-right
-        { { botRight.x, botRight.y, 1.0f }, {1,1,1}, {1.0f, 0.0f} }, // 2 - bottom-right
-        { { botLeft.x,  botLeft.y,  1.0f }, {1,1,1}, {0.0f, 0.0f} }, // 3 - bottom-left
+        { { topLeft.x,  topLeft.y,  0.0f }, {0.0f, 1.0f} }, // 0 - top-left
+        { { topRight.x, topRight.y, 0.0f }, {1.0f, 1.0f} }, // 1 - top-right
+        { { botRight.x, botRight.y, 0.0f }, {1.0f, 0.0f} }, // 2 - bottom-right
+        { { botLeft.x,  botLeft.y,  0.0f }, {0.0f, 0.0f} }, // 3 - bottom-left
     };
 
     vector<GLuint> indices = {
         0, 1, 3,   // first triangle
         1, 2, 3    //second triangle
     };
+
+    return { verts, indices };
+}
+
+Primitive PrimitiveFactory::createQuad(vec2 topLeft, vec2 topRight, vec2 botRight, vec2 botLeft, gpu::UVRect uvs)
+{
+	vector<Vertex> verts = {
+		{ { topLeft.x,  topLeft.y,  0.0f }, {uvs.u0, uvs.v1} }, // 0 - top-left
+		{ { topRight.x, topRight.y, 0.0f }, {uvs.u1, uvs.v1} }, // 1 - top-right
+		{ { botRight.x, botRight.y, 0.0f }, {uvs.u1, uvs.v0} }, // 2 - bottom-right
+		{ { botLeft.x,  botLeft.y,  0.0f }, {uvs.u0, uvs.v0} }, // 3 - bottom-left
+	};
+
+	vector<GLuint> indices = {
+		0, 1, 3,   // first triangle
+		1, 2, 3    //second triangle
+	};
+
+	return { verts, indices };
+}
+
+Primitive PrimitiveFactory::createPoly(std::vector<glm::vec2> points)
+{
+    vector<Vertex> verts;
+    std::vector<GLuint> indices;
+
+    int index = 0;
+    for (int i = 0; i < points.size(); i++)
+    {
+        verts.push_back({ { points[i].x, points[i].y, 1.0f}, {0.0f, 0.0f}});
+    }
+
+    for (int i = 0; i < points.size() - 1; i++)
+    {
+        indices.push_back(i);
+        indices.push_back(i + 1);
+    }
+
+    indices.push_back(points.size() - 1);
+    indices.push_back(0);
 
     return { verts, indices };
 }

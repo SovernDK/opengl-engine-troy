@@ -2,7 +2,10 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_video.h>
 
+#include "graphics/rendering/renderer.h"
+
 #include <string>
+#include <memory>
 
 namespace core
 {
@@ -18,5 +21,6 @@ namespace core
         int viewportHeight = 1080;
 
         SDL_GLContext glContext = nullptr;
+        std::shared_ptr<IRenderer> activeRenderer = nullptr;
     };
 }

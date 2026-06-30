@@ -11,6 +11,10 @@ endif()
 
 project ("Renderer")
 
+if(MSVC)
+    add_compile_options(/Zc:__cplusplus)
+endif()
+
 add_compile_definitions(PROJECT_ROOT_DIR="${CMAKE_SOURCE_DIR}/")
 
 # Add source to this project's executable.
@@ -19,6 +23,7 @@ file(GLOB_RECURSE SRC_FILES
     "${PROJECT_SOURCE_DIR}/src/*.h"
 	"${PROJECT_SOURCE_DIR}/lib/*.cpp"
     "${PROJECT_SOURCE_DIR}/lib/*.h"
+    "${PROJECT_SOURCE_DIR}/shaders/*.glsl"
 )
 
 add_executable(Renderer ${SRC_FILES})
@@ -28,7 +33,7 @@ find_package(SDL3_image REQUIRED)
 find_package(SDL3_mixer REQUIRED)
 find_package(SDL3_ttf REQUIRED)
 
-find_package(flecs CONFIG REQUIRED)
+#find_package(flecs CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(freetype REQUIRED)
@@ -44,18 +49,37 @@ add_custom_command(TARGET Renderer POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/shaders
     $<TARGET_FILE_DIR:Renderer>/shaders
+
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/assets
     $<TARGET_FILE_DIR:Renderer>/assets
+
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/logs
+    $<TARGET_FILE_DIR:Renderer>/logs
+
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
     ${CMAKE_SOURCE_DIR}/config.json
     $<TARGET_FILE_DIR:Renderer>/config.json
+
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_SOURCE_DIR}/style.json
+    $<TARGET_FILE_DIR:Renderer>/style.json
+
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_SOURCE_DIR}/settings.json
+    $<TARGET_FILE_DIR:Renderer>/settings.json
 )
 
 target_include_directories(Renderer PRIVATE
     ${PROJECT_SOURCE_DIR}   
     ${PROJECT_SOURCE_DIR}/src     
     ${PROJECT_SOURCE_DIR}/src/core
+    ${PROJECT_SOURCE_DIR}/src/core/style
+    ${PROJECT_SOURCE_DIR}/src/generation
+    ${PROJECT_SOURCE_DIR}/src/gameplay
+    ${PROJECT_SOURCE_DIR}/src/graphics/rendering
+    ${PROJECT_SOURCE_DIR}/src/graphics/opengl
     
     ${PROJECT_SOURCE_DIR}/lib
     ${PROJECT_SOURCE_DIR}/lib/glm
@@ -63,6 +87,9 @@ target_include_directories(Renderer PRIVATE
     
     ${PROJECT_SOURCE_DIR}/includes
     ${PROJECT_SOURCE_DIR}/includes/core
+    ${PROJECT_SOURCE_DIR}/includes/gameplay
+    ${PROJECT_SOURCE_DIR}/includes/graphics/rendering
+    ${PROJECT_SOURCE_DIR}/includes/graphics/opengl
 )
 
 target_link_libraries(Renderer PRIVATE 
@@ -71,7 +98,7 @@ target_link_libraries(Renderer PRIVATE
 	SDL3_mixer::SDL3_mixer
 	SDL3_ttf::SDL3_ttf
 
-	flecs::flecs
+	#flecs::flecs
 	imgui::imgui
 	glad::glad
 	Freetype::Freetype

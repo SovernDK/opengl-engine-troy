@@ -9,6 +9,7 @@ class ShaderProgram
 public:
     ShaderProgram() = default;
     ~ShaderProgram();
+
     ShaderProgram(const ShaderProgram&) = delete;
     ShaderProgram& operator=(const ShaderProgram&) = delete;
 
@@ -28,6 +29,14 @@ public:
     void setInt(const std::string& name, const int value);
     void setBool(const std::string& name, const bool value);
     void setFloat(const std::string& name, const float value);
+
+    void setUniform(const std::string& name, float value);
+    void setUniform(const std::string& name, glm::vec3 value);
+    void setUniform(const std::string& name, glm::vec4 value);
+    void setUniform(const std::string& name, glm::mat4 value);
+    void setUniform(const std::string& name, int value);
+    void setUniform(const std::string& name, glm::vec2 value);
+    void setUniform(const std::string& name, bool value);
 
     void destroy();
     

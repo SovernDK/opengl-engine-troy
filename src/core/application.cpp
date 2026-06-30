@@ -1,5 +1,8 @@
 #pragma once
 #include "core/application.h"
+#include "core/app_state.h"
+#include "core/config.h"
+#include "core/profiler.h"
 
 #include <imgui/imgui_impl_sdl3.h>
 #include <imgui/imgui_impl_opengl3.h>
@@ -9,12 +12,9 @@
 #include <iostream>
 #include <glad/glad.h>
 
-#include "core/app_state.h"
-
 #include "utility/file_util.h"
-#include "core/config.h"
-
-#include "core/profiler.h"
+#include "graphics/opengl/opengl_impl.h"
+#include "graphics/rendering/canvas_2d.h"
 
 using namespace core;
 
@@ -22,16 +22,24 @@ SDL_AppResult Application::Init(void** appState, int argc, char** argv)
 {
     _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 
+    printCompilerInfo();
+
     AppState* context = new AppState();
 
-    bool configLoaded = GConfig.load(file_util::getPath("config.json"));
+    bool configLoaded = GConfig.load(file_util::createPath("config.json"));
     if (!configLoaded) {
         SDL_Log("Unable to load config! Closing the app.");
         return SDL_APP_FAILURE;
     }
 
     initSDL(*context);
-    initOpenGl(*context);
+
+    bool openGlInit = OpenGLImpl::init(*context, &frameArena);
+    if (!openGlInit)
+    {
+        SDL_Log("Unable to initialize opengl! Closing the app.");
+        return SDL_APP_FAILURE;
+    }
 
 	imgui = ImGuiImpl(context->window, context->glContext, "#version 430");
     if(!imgui.init()) {
@@ -39,7 +47,12 @@ SDL_AppResult Application::Init(void** appState, int argc, char** argv)
         return SDL_APP_FAILURE;
     }
 
-    startGame(*context);
+    game = Game(context->viewportWidth, context->viewportHeight);
+    game.init(*context);
+    game.arena = &frameArena;
+
+    Profiler::instance().frameBufferCap = frameArena.capacity();
+
     *appState = context;
 
     return SDL_APP_CONTINUE;
@@ -51,14 +64,19 @@ SDL_AppResult Application::Iterate(void* appState)
 
     imgui.newFrame();
 
-    Profiler::Instance().update();
-
-    game.update(Profiler::Instance().getDeltaTime());
+    Profiler::instance().update();
+    game.update(Profiler::instance().getDeltaTime());
     game.draw();
+
+    context->activeRenderer->render(*game.mainCam.get());
 
 	imgui.render();
 
     SDL_GL_SwapWindow(context->window);
+    SDL_Delay(12);
+
+    Profiler::instance().frameBufferUsed = frameArena.inUse();
+    frameArena.reset();
 
     return SDL_APP_CONTINUE;
 }
@@ -72,7 +90,7 @@ SDL_AppResult Application::Event(void* appState, SDL_Event* event)
     if (event->type == SDL_EVENT_QUIT)                                      { return SDL_APP_SUCCESS; }
     if (event->type == SDL_EVENT_KEY_DOWN && event->key.key == SDLK_ESCAPE) { return SDL_APP_SUCCESS; }
 
-    game.input(*event, Profiler::Instance().getDeltaTime());
+    game.input(*event, Profiler::instance().getDeltaTime());
 
     return SDL_APP_CONTINUE;
 }
@@ -86,12 +104,8 @@ void Application::Quit(void* appState, SDL_AppResult result)
 
     if (context)
     {
-        if (context->glContext)
-        {
-            SDL_GL_DestroyContext(context->glContext);
-            context->glContext = nullptr;
-            SDL_Log("OpenGL context destroyed");
-        }
+        OpenGLImpl::quit(*context);
+
         if (context->window)
         {
             SDL_DestroyWindow(context->window);
@@ -148,96 +162,35 @@ SDL_AppResult Application::initSDL(AppState& context)
     return SDL_APP_CONTINUE;
 }
 
-SDL_AppResult Application::initOpenGl(AppState& context)
+void Application::printCompilerInfo()
 {
-    //openGL context
-    context.glContext = SDL_GL_CreateContext(context.window);
-    if (!context.glContext)
+    std::string cppStandard = "";
+
+    switch (__cplusplus)
     {
-        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "GL context creation failed");
-        return SDL_APP_FAILURE;
+    case 199711L: cppStandard = "C++98/C++03"; break;
+    case 201103L: cppStandard = "C++11"; break;
+    case 201402L: cppStandard = "C++14"; break;
+    case 201703L: cppStandard = "C++17"; break;
+    case 202002L: cppStandard = "C++20"; break;
+    case 202302L: cppStandard = "C++23"; break;
+    default:      cppStandard = "Unknown C++ version";
     }
 
-    SDL_GL_MakeCurrent(context.window, context.glContext);
-    SDL_GL_SetSwapInterval(1);
-
-    //glad initialization
-    if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress))
-    {
-        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Failed to init GLAD");
-        return SDL_APP_FAILURE;
-    }
-
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-
-    //openGL Debug Output
-    int flags; glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
-    if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
-    {
-        glEnable(GL_DEBUG_OUTPUT);
-        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-        //glDebugMessageCallback(glDebugOutput, nullptr);
-        glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
-        SDL_Log("OpenGL Debug output initialized!");
-    }
-    else
-    {
-        SDL_Log("Error trying to initialize Debug Output");
-        return SDL_APP_FAILURE;
-    }
-
-    SDL_Log("OpenGL version: %s", glGetString(GL_VERSION));
-
-    return SDL_APP_CONTINUE;
-}
-
-SDL_AppResult Application::startGame(AppState& context)
-{
-    game = Game(context.viewportWidth, context.viewportHeight);
-    game.init(context);
-
-    return SDL_APP_CONTINUE;
-}
-
-// OpenGL Debug Output
-void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id, GLenum severity, GLsizei length, const char* message, const void* userParam)
-{
-    // ignore non-significant error/warning codes
-    if (id == 131169 || id == 131185 || id == 131218 || id == 131204) return;
-
-    std::cout << "---------------" << std::endl;
-    std::cout << "Debug message (" << id << "): " << message << std::endl;
-
-    switch (source)
-    {
-    case GL_DEBUG_SOURCE_API:             std::cout << "Source: API"; break;
-    case GL_DEBUG_SOURCE_WINDOW_SYSTEM:   std::cout << "Source: Window System"; break;
-    case GL_DEBUG_SOURCE_SHADER_COMPILER: std::cout << "Source: Shader Compiler"; break;
-    case GL_DEBUG_SOURCE_THIRD_PARTY:     std::cout << "Source: Third Party"; break;
-    case GL_DEBUG_SOURCE_APPLICATION:     std::cout << "Source: Application"; break;
-    case GL_DEBUG_SOURCE_OTHER:           std::cout << "Source: Other"; break;
-    } std::cout << std::endl;
-
-    switch (type)
-    {
-    case GL_DEBUG_TYPE_ERROR:               std::cout << "Type: Error"; break;
-    case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR: std::cout << "Type: Deprecated Behaviour"; break;
-    case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:  std::cout << "Type: Undefined Behaviour"; break;
-    case GL_DEBUG_TYPE_PORTABILITY:         std::cout << "Type: Portability"; break;
-    case GL_DEBUG_TYPE_PERFORMANCE:         std::cout << "Type: Performance"; break;
-    case GL_DEBUG_TYPE_MARKER:              std::cout << "Type: Marker"; break;
-    case GL_DEBUG_TYPE_PUSH_GROUP:          std::cout << "Type: Push Group"; break;
-    case GL_DEBUG_TYPE_POP_GROUP:           std::cout << "Type: Pop Group"; break;
-    case GL_DEBUG_TYPE_OTHER:               std::cout << "Type: Other"; break;
-    } std::cout << std::endl;
-
-    switch (severity)
-    {
-    case GL_DEBUG_SEVERITY_HIGH:         std::cout << "Severity: high"; break;
-    case GL_DEBUG_SEVERITY_MEDIUM:       std::cout << "Severity: medium"; break;
-    case GL_DEBUG_SEVERITY_LOW:          std::cout << "Severity: low"; break;
-    case GL_DEBUG_SEVERITY_NOTIFICATION: std::cout << "Severity: notification"; break;
-    } std::cout << std::endl;
-    std::cout << std::endl;
+    std::cout << "\033[35mC++ Standard: \033[0m" << cppStandard << "(" << __cplusplus << ")" << '\n';
+#ifdef _MSC_VER
+    std::cout << "\033[36mCompiler: \033[0mMSVC\n";
+    std::cout << "\033[36m_MSC_VER \033[0m     = " << _MSC_VER << '\n';
+    std::cout << "\033[36m_MSC_FULL_VER\033[0m = " << _MSC_FULL_VER << '\n';
+#elif defined(__clang__)
+    std::cout << "Compiler:\033[36m Clang \033[0m\n "
+        << __clang_major__ << "."
+        << __clang_minor__ << "."
+        << __clang_patchlevel__ << '\n';
+#elif defined(__GNUC__)
+    std::cout << "Compiler:\033[36m GCC \033[0m"
+        << __GNUC__ << "."
+        << __GNUC_MINOR__ << "."
+        << __GNUC_PATCHLEVEL__ << '\n';
+#endif
 }

@@ -6,23 +6,17 @@
 class Mesh
 {
 public:
+	std::vector<gpu::Vertex> vertices{};
+	std::vector<GLuint> indices{};
+public:
 	Mesh() = default;
 
-	void setVerticies(const std::vector<gpu::Vertex>& vertices, const std::vector<GLuint>& indicies);
-
-	std::vector<gpu::Vertex> getVertices() const
+	void setVerticies(const std::vector<gpu::Vertex>& vertices, const std::vector<GLuint>& indices)
 	{
-		return vertices;
+		this->vertices = vertices;
+		this->indices = indices;
 	}
 
-	std::vector<GLuint> getIndices() const
-	{
-		return indicies;
-	}
-private:
-	int vertexCount = 0;
-	int indexCount = 0;
-
-	std::vector<gpu::Vertex> vertices;
-	std::vector<GLuint> indicies;
+	int vertexCount() const { return vertices.size(); }
+	int indexCount() const { return indices.size(); }
 };
