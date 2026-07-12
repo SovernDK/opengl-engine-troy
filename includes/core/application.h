@@ -17,7 +17,7 @@ namespace core
 	private:
 		Game game;
 		ImGuiImpl imgui;
-		Arena frameArena;
+		mem::Arena frameArena;
 	public:
 		Application() : frameArena(1024 * 1024) {};
 

@@ -17,7 +17,7 @@ public:
 
 	~IdPool() = default;
 
-	T getId()
+	T next()
 	{
 		T id = 0;
 		if (!freeIds.empty())

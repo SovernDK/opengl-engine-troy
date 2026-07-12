@@ -13,43 +13,15 @@
 
 using namespace editor;
 
-void Editor::update(float dt)
+void Editor::update(float dt, const ICamera& camera)
 {
 	core::Game& game = dynamic_cast<core::Game&>(m_ctx);
 
-	float toolbarWidth = game.screenWidth - game.viewportWidth;
-	glm::vec2 toolbarPos = glm::vec2(game.viewportWidth, 0);
-	toolbar(toolbarWidth, game.viewportWidth, toolbarPos);
+#pragma region Right Bar
+	float rightBarWidth = (game.screenWidth - camera.viewport().z) / 2;
+	float rightBarHeight = game.screenHeight;
+	glm::vec2 rightBarPos = glm::vec2(game.screenWidth - rightBarWidth, 0);
 
-	generalDebugWindow(core::Profiler::instance().getFPS(),
-		core::Profiler::instance().getDeltaTime(),
-		core::Profiler::instance().getDrawCalls(),
-		core::Profiler::instance().getMemoryStats().workingSetMB,
-		core::Profiler::instance().getMemoryStats().privateBytesMB,
-		core::Profiler::instance().frameBufferUsed,
-		core::Profiler::instance().frameBufferCap);
-
-	cameraInspector(*game.mainCam.get());
-
-	//stateEditor(game.gameFlowFsm->getCurrent().lock()->name());
-	sceneEditor();
-
-	worldTree(*game.world.get());
-	uiTree();
-
-	entityInspector(*game.world.get());
-	uiInspector();
-
-	ImGui::Begin("Toolbar");
-	if (ImGui::CollapsingHeader("World map"))
-	{
-		worldMap->render();
-	}
-	ImGui::End();
-}
-
-void Editor::toolbar(int width, int height, glm::vec2 pos)
-{
 	ImGuiWindowFlags toolbar_flags =
 		ImGuiWindowFlags_NoTitleBar |
 		ImGuiWindowFlags_NoResize |
@@ -59,28 +31,113 @@ void Editor::toolbar(int width, int height, glm::vec2 pos)
 		ImGuiWindowFlags_NoBringToFrontOnFocus |
 		ImGuiWindowFlags_NoCollapse;
 
-	ImGui::SetNextWindowPos(ImVec2(pos.x, pos.y), ImGuiCond_Always);
-	ImGui::SetNextWindowSize(ImVec2((float)width, (float)height), ImGuiCond_Always);
+	ImGui::SetNextWindowPos(ImVec2(rightBarPos.x, rightBarPos.y), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(rightBarWidth, rightBarHeight), ImGuiCond_Always);
+	ImGui::Begin("RightBar", nullptr, toolbar_flags);
 
-	ImGui::Begin("Toolbar", nullptr, toolbar_flags);
+	ImGui::BeginTabBar("Editor#Right Tabs");
+	if (ImGui::BeginTabItem("ECS"))
+	{
+		worldTree(*game.world.get());
+		ImGui::EndTabItem();
+	}
+
+	if (ImGui::BeginTabItem("UI"))
+	{
+		uiTree();
+		ImGui::EndTabItem();
+	}
+	ImGui::EndTabBar();
+
 	ImGui::End();
+#pragma endregion Right Bar
+
+#pragma region Left Bar
+	float leftBarWidth = (game.screenWidth - camera.viewport().z) / 2;
+	float leftBarHeight = game.screenHeight;
+	glm::vec2 leftBarPos = glm::vec2(0, 0);
+
+	ImGui::SetNextWindowPos(ImVec2(leftBarPos.x, leftBarPos.y), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(leftBarWidth, leftBarHeight), ImGuiCond_Always);
+	ImGui::Begin("LeftBar", nullptr, toolbar_flags);
+
+	ImGui::BeginTabBar("Editor#Left Tabs");
+	if (ImGui::BeginTabItem("ECS"))
+	{
+		entityInspector(*game.world.get());
+		ImGui::EndTabItem();
+	}
+
+	if (ImGui::BeginTabItem("UI"))
+	{
+		uiInspector();
+		ImGui::EndTabItem();
+	}
+
+	if (ImGui::BeginTabItem("Camera"))
+	{
+		cameraInspector(*game.mainCam.get());
+		ImGui::EndTabItem();
+	}
+
+	ImGui::EndTabBar();
+	ImGui::End();
+#pragma endregion Left Bar
+
+#pragma region Top Bar
+	float topBarWidth = game.screenWidth - leftBarWidth + rightBarWidth;
+	float topBarHeight = (game.screenHeight - camera.viewport().w) /2;
+	glm::vec2 topBarPos = glm::vec2(leftBarWidth, 0);
+
+	ImGui::SetNextWindowPos(ImVec2(topBarPos.x, topBarPos.y), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(topBarWidth, topBarHeight), ImGuiCond_Always);
+	ImGui::Begin("TopBar", nullptr, toolbar_flags);
+
+	generalDebugWindow(core::Profiler::instance().getFPS(),
+		core::Profiler::instance().getDeltaTime(),
+		core::Profiler::instance().getDrawCalls(),
+		core::Profiler::instance().getMemoryStats().workingSetMB,
+		core::Profiler::instance().getMemoryStats().privateBytesMB,
+		core::Profiler::instance().frameBufferUsed,
+		core::Profiler::instance().frameBufferCap);
+
+	ImGui::End();
+#pragma endregion Left Bar
+
+#pragma region Bottom Bar
+	float botBarWidth = game.screenWidth - leftBarWidth + rightBarWidth;
+	float botBarHeight = (game.screenHeight - camera.viewport().w) / 2;
+	glm::vec2 botBarPos = glm::vec2(leftBarWidth, game.screenHeight - topBarHeight);
+
+	ImGui::SetNextWindowPos(ImVec2(botBarPos.x, botBarPos.y), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(botBarWidth, botBarHeight), ImGuiCond_Always);
+	ImGui::Begin("BottomBar", nullptr, toolbar_flags);
+	ImGui::End();
+#pragma endregion Bottom Bar
+}
+
+void Editor::draw()
+{
+	if (uiSelectedId != 0)
+	{
+		auto selectedWidget = ServiceLocator::get<IUIService>()->widget(uiSelectedId);
+		Canvas2D::setDepth(999.0f);
+		Canvas2D::setColor({0, 255, 0, 255});
+		Canvas2D::drawRect(selectedWidget->rect.pos, selectedWidget->rect.size);
+		Canvas2D::clear();
+	}
 }
 
 void Editor::generalDebugWindow(Uint64 fps, float dt, int drawCalls, float memMBWorking, float memMBPrivate, size_t frameMemUsed, size_t frameMemCap)
 {
-	ImGui::Begin("Toolbar");
-	if (ImGui::CollapsingHeader("Debug"))
-	{
-		ImGui::Text("Elapsed time: %.2fs", SDL_GetTicks() / 1000.0f);
-		ImGui::Text("Delta time: %f", dt);
-		ImGui::Text("FPS: %i", fps);
-		ImGui::Text("Draw calls: %i", drawCalls);
-		ImGui::SeparatorText("Memory");
-		ImGui::Text("Working mem: %.2f MB", memMBWorking);
-		ImGui::Text("Mem usage: %.2f MB", memMBPrivate);
-		ImGui::Text("Frame buffer: %d / %d kB", frameMemUsed / 1024, frameMemCap / 1024);
-	}
-	ImGui::End();
+	ImGui::Text("Elapsed time: %.2fs", SDL_GetTicks() / 1000.0f);
+	ImGui::Text("Delta time: %f", dt);
+	ImGui::Text("FPS: %i", fps);
+	ImGui::Text("Draw calls: %i", drawCalls);
+	ImGui::SeparatorText("Memory");
+	ImGui::Text("Working mem: %.2f MB", memMBWorking);
+	ImGui::Text("Mem usage: %.2f MB", memMBPrivate);
+	ImGui::Text("Frame buffer: %d / %d kB", frameMemUsed / 1024, frameMemCap / 1024);
 }
 
 void Editor::sceneEditor()
@@ -110,126 +167,144 @@ void Editor::stateEditor(std::string currentState)
 
 void Editor::cameraInspector(ICamera& camera)
 {
-	ImGui::Begin("Toolbar");
-	if (ImGui::CollapsingHeader("Camera"))
+	ImGui::SeparatorText("Background Color");
+	SDL_Color& bg = camera.backgroundColor;
+	float color[4] = { bg.r / 255.0f, bg.g / 255.0f, bg.b / 255.0f, bg.a / 255.0f };
+	if (ImGui::ColorEdit4("Background", color))
 	{
-		ImGui::SeparatorText("Background Color");
-		SDL_Color& bg = camera.backgroundColor;
-		float color[4] = { bg.r / 255.0f, bg.g / 255.0f, bg.b / 255.0f, bg.a / 255.0f };
-		if (ImGui::ColorEdit4("Background", color))
-		{
-			bg.r = (Uint8)(color[0] * 255.0f);
-			bg.g = (Uint8)(color[1] * 255.0f);
-			bg.b = (Uint8)(color[2] * 255.0f);
-			bg.a = (Uint8)(color[3] * 255.0f);
-		}
+		bg.r = (Uint8)(color[0] * 255.0f);
+		bg.g = (Uint8)(color[1] * 255.0f);
+		bg.b = (Uint8)(color[2] * 255.0f);
+		bg.a = (Uint8)(color[3] * 255.0f);
+	}
 
-		ImGui::SeparatorText("Read-only");
-		glm::vec4 vp = camera.viewport();
-		ImGui::Text("Viewport: %.1f, %.1f, %.1f, %.1f", vp.x, vp.y, vp.z, vp.w);
+	ImGui::SeparatorText("Read-only");
+	glm::vec4 vp = camera.viewport();
+	ImGui::Text("Viewport: %.1f, %.1f, %.1f, %.1f", vp.x, vp.y, vp.z, vp.w);
 
-		glm::vec4 b = camera.bounds();
-		ImGui::Text("Bounds: %.2f, %.2f, %.2f, %.2f", b.x, b.y, b.z, b.w);
+	glm::vec4 b = camera.bounds();
+	ImGui::Text("Bounds: %.2f, %.2f, %.2f, %.2f", b.x, b.y, b.z, b.w);
 
-		glm::mat4 view = camera.view();
-		ImGui::Text("View Matrix:");
-		for (int r = 0; r < 4; ++r)
-			ImGui::Text("%.2f %.2f %.2f %.2f", view[0][r], view[1][r], view[2][r], view[3][r]);
+	glm::mat4 view = camera.view();
+	ImGui::Text("View Matrix:");
+	for (int r = 0; r < 4; ++r)
+		ImGui::Text("%.2f %.2f %.2f %.2f", view[0][r], view[1][r], view[2][r], view[3][r]);
 
-		// ---- Mutators via interface methods ----
-		ImGui::SeparatorText("Move");
-		static glm::vec3 moveDelta(0.0f);
-		ImGui::DragFloat3("Move delta", &moveDelta.x, 0.1f);
-		if (ImGui::Button("Apply Move"))
-			camera.move(moveDelta);
+	/*ImGui::SeparatorText("Move");
+	static glm::vec3 moveDelta(0.0f);
+	ImGui::DragFloat3("Move delta", &moveDelta.x, 0.1f);
+	if (ImGui::Button("Apply Move"))
+		camera.move(moveDelta);
 
-		ImGui::SeparatorText("Zoom");
-		static float zoomDelta = 0.0f;
-		ImGui::DragFloat("Zoom delta", &zoomDelta, 0.01f);
-		if (ImGui::Button("Apply Zoom"))
-			camera.changeZoom(zoomDelta);
+	ImGui::SeparatorText("Zoom");
+	static float zoomDelta = 0.0f;
+	ImGui::DragFloat("Zoom delta", &zoomDelta, 0.01f);
+	if (ImGui::Button("Apply Zoom"))
+		camera.changeZoom(zoomDelta);
 
-		ImGui::SeparatorText("Size");
-		static float w = 800, h = 600;
-		ImGui::DragFloat("Resize width", &w);
-		ImGui::DragFloat("Resize height", &h);
-		if (ImGui::Button("Apply Resize"))
-			camera.resize(w, h);
-	}								
-	ImGui::End();
+	ImGui::SeparatorText("Size");
+	static float w = 800, h = 600;
+	ImGui::DragFloat("Resize width", &w);
+	ImGui::DragFloat("Resize height", &h);
+	if (ImGui::Button("Apply Resize"))
+		camera.resize(w, h);				*/
 }
+
 
 void Editor::worldTree(ecs::ECSWorld& world)
 {
-	ImGui::Begin("Toolbar");
-	if (ImGui::CollapsingHeader("Entities##"))
+	ImGui::SeparatorText("Entities");
+
+	world.each([&](ecs::Entity& e)
 	{
-		world.each([&](ecs::Entity& e)
+		if (e.id == 0) return;
+		
+		std::string label = world.name(e.id);
+		if (label.empty())
+			label = std::format("Entity({}) ", e.id);
+			
+		bool isSelected = (selectedId == e.id);
+
+		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
+			ImGuiTreeNodeFlags_OpenOnDoubleClick |
+			ImGuiTreeNodeFlags_SpanAvailWidth;
+		if (isSelected) flags |= ImGuiTreeNodeFlags_Selected;
+
+		if (ImGui::TreeNodeEx(label.c_str(), flags, label.c_str()))
 		{
-			std::string label = std::format("Entity({}) ", e.id);
-			bool isSelected = (selectedId == e.id);
+			if (ImGui::IsItemClicked())
+				selectedId = e.id;
 
-			ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
-				ImGuiTreeNodeFlags_OpenOnDoubleClick |
-				ImGuiTreeNodeFlags_SpanAvailWidth;
-			if (isSelected) flags |= ImGuiTreeNodeFlags_Selected;
-
-			if (ImGui::TreeNodeEx(label.c_str(), flags, label.c_str()))
-			{
-				if (ImGui::IsItemClicked())
-					selectedId = e.id;
-
-				ImGui::TreePop();
-			}
-		});
-	}
-	ImGui::End();
+			ImGui::TreePop();
+		}
+	});
 }
 
 void Editor::entityInspector(ecs::ECSWorld& world)
 {
 	if (selectedId <= 0) 
 	{
+		ImGui::Text("No entity is selected");
 		return;
 	}
 
 	core::Game& game = dynamic_cast<core::Game&>(m_ctx);
 	ecs::Entity& e = game.world->entity(selectedId);
 	
-	ImGui::Begin("Toolbar");
-	if (ImGui::CollapsingHeader("Entity Inspector"))
+	std::vector<std::string> otherComponents;
+	for (auto& [type, ptr] : world.types(e.id))
 	{
-		for (auto& type : world.types(e.id))
+		if (auto transform = world.isType<ecs::Transform2D>({ type, ptr }))
 		{
-			if (auto transform = world.isType<ecs::Transform2D>(type))
+			if (ImGui::CollapsingHeader("Transform2D"))
 			{
-				ImGui::Text(typeid(*transform).name());
-				ImGui::InputFloat("X: ", &transform->position.x);
-				ImGui::InputFloat("Y: ", &transform->position.y);
-				ImGui::InputFloat("Z: ", &transform->position.z);
-			}
-			else
-			{
-				ImGui::Text(type.first.name());
+				ImGui::InputFloat("X: ", &transform->position.x, 1.0f, 5.0f);
+				ImGui::InputFloat("Y: ", &transform->position.y, 1.0f, 5.0f);
+				ImGui::InputFloat("Z: ", &transform->position.z, 1.0f, 5.0f);
 			}
 		}
+		else if (auto sprite = world.isType<ecs::Sprite>({ type, ptr }))
+		{
+			if (ImGui::CollapsingHeader("Sprite"))
+			{
+				//ImGui::InputInt("Texture Id: ", &sprite->textureId.id);
+
+				ImGui::SeparatorText("UVs");
+				ImGui::InputFloat("U0: ", &sprite->uv.u0, 0.01f, 0.05f);
+				ImGui::InputFloat("U1: ", &sprite->uv.u1, 0.01f, 0.05f);
+				ImGui::InputFloat("V0: ", &sprite->uv.v0, 0.01f, 0.05f);
+				ImGui::InputFloat("V1: ", &sprite->uv.v1, 0.01f, 0.05f);
+
+				ImGui::SeparatorText("Depth##sep");
+				ImGui::InputFloat("Depth: ", &sprite->depth, 1.0f, 2.0f, "%.0f");
+			}
+		}
+		else
+		{
+			otherComponents.push_back(type.name());
+		}
 	}
-	ImGui::End();
+
+	ImGui::SeparatorText("Not implemented");
+	for (auto c : otherComponents)
+	{
+		ImGui::Text(c.c_str());
+	}
 }
+
 
 void Editor::uiTree()
 {
-	ImGui::Begin("Toolbar");
-	if (ImGui::CollapsingHeader("UI Widgets##"))
-	{
-		uiNode(ServiceLocator::get<IUIService>()->root());
-	}
-	ImGui::End();
+	ImGui::SeparatorText("Widgets");
+	uiNode(ServiceLocator::get<IUIService>()->root());
 }
 
-void Editor::uiNode(UIWidget& widget)
+void Editor::uiNode(const UIWidget& widget)
 {
 	std::string label = std::format("widget_{}", widget.id);
+	if (!widget.handle.empty())
+		label = std::format("{}_{}", widget.handle, widget.id);
+
 	bool isSelected = (uiSelectedId == widget.id);
 
 	ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
@@ -237,14 +312,25 @@ void Editor::uiNode(UIWidget& widget)
 		ImGuiTreeNodeFlags_SpanAvailWidth;
 
 	if (widget.children().empty())
-	{
 		flags |= ImGuiTreeNodeFlags_Leaf;
+
+	bool greyedOut = !widget.visible;
+	if (greyedOut)
+	{
+		ImGui::PushStyleColor(
+			ImGuiCol_Text,
+			IM_COL32(120, 120, 120, 255)
+		);
 	}
 
-	if (isSelected) flags |= ImGuiTreeNodeFlags_Selected;
+	if (isSelected) 
+		flags |= ImGuiTreeNodeFlags_Selected;
 
 	if (ImGui::TreeNodeEx(label.c_str(), flags, label.c_str()))
 	{
+		if (greyedOut)
+			ImGui::PopStyleColor();
+
 		if (ImGui::IsItemClicked())
 			uiSelectedId = widget.id;
 
@@ -257,30 +343,40 @@ void Editor::uiNode(UIWidget& widget)
 	}
 }
 
-void Editor::uiInspector()
+void Editor::uiInspector() const
 {
 	if (uiSelectedId <= 0)
 	{
+		ImGui::Text("No widget is selected");
 		return;
 	}
 
-	ImGui::Begin("Toolbar");
-	if (ImGui::CollapsingHeader("UI Inspector"))
+	auto selectedWidget = ServiceLocator::get<IUIService>()->widget(uiSelectedId);
+	ImGui::Text(std::format("Id: {}", selectedWidget->id).c_str());
+	ImGui::Text(std::format("Style: {}", selectedWidget->style).c_str());
+	/*char* style = const_cast<selectedWidget->style.c_str();
+	ImGui::InputText("Style", style);*/
+
+	ImGui::SeparatorText("Local Rect");
+	ImGui::InputFloat("X", &selectedWidget->localRect.pos.x, 0.01f, 0.05f, "%.2f");
+	ImGui::InputFloat("Y", &selectedWidget->localRect.pos.y, 0.01f, 0.05f, "%.2f");
+	ImGui::InputFloat("W", &selectedWidget->localRect.size.x, 0.01f, 0.05f, "%.2f");
+	ImGui::InputFloat("H", &selectedWidget->localRect.size.y, 0.01f, 0.05f, "%.2f");
+
+	ImGui::SeparatorText("World Rect");
+	ImGui::Text(std::format("X: {}", selectedWidget->rect.pos.x).c_str());
+	ImGui::Text(std::format("Y: {}", selectedWidget->rect.pos.y).c_str());
+	ImGui::Text(std::format("W: {}", selectedWidget->rect.size.x).c_str());
+	ImGui::Text(std::format("H: {}", selectedWidget->rect.size.y).c_str());
+
+	ImGui::SeparatorText("State");
+	ImGui::Checkbox("Visible", &selectedWidget->visible);
+	ImGui::Checkbox("Blocking", &selectedWidget->blocking);
+	ImGui::Checkbox("Interactive", &selectedWidget->interactive);
+
+	ImGui::SeparatorText("Actions");
+	if (ImGui::Button("Set Dirty"))
 	{
-		auto selectedWidget = ServiceLocator::get<IUIService>()->widget(uiSelectedId);
-		ImGui::Text(typeid(*selectedWidget).name());
-		ImGui::Separator();
-		ImGui::Text("World Rect");
-		ImGui::Text(std::format("Pos: x({}), y({})",	selectedWidget->rect.pos.x,		selectedWidget->rect.pos.y).c_str());
-		ImGui::Text(std::format("Size: x({}), y({})",	selectedWidget->rect.size.x,	selectedWidget->rect.size.y).c_str());
-		ImGui::Text("Local Rect");
-		ImGui::Text(std::format("Pos: x({}), y({})",	selectedWidget->localRect.pos.x,	selectedWidget->localRect.pos.y).c_str());
-		ImGui::Text(std::format("Size: x({}), y({})",	selectedWidget->localRect.size.x,	selectedWidget->localRect.size.y).c_str());
-		ImGui::Text("States");
-		ImGui::Text(std::format("Visible: {}",		selectedWidget->visible).c_str());
-		ImGui::Text(std::format("Interactive: {}",	selectedWidget->interactive).c_str());
-		ImGui::Text("Style");
-		ImGui::Text(std::format("Style: {}", selectedWidget->style).c_str());
+		selectedWidget->setDirty();
 	}
-	ImGui::End();
 }

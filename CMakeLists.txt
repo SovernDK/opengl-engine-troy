@@ -75,6 +75,7 @@ target_include_directories(Renderer PRIVATE
     ${PROJECT_SOURCE_DIR}   
     ${PROJECT_SOURCE_DIR}/src     
     ${PROJECT_SOURCE_DIR}/src/core
+    ${PROJECT_SOURCE_DIR}/src/core/fsm
     ${PROJECT_SOURCE_DIR}/src/core/style
     ${PROJECT_SOURCE_DIR}/src/generation
     ${PROJECT_SOURCE_DIR}/src/gameplay

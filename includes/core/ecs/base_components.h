@@ -6,6 +6,7 @@
 
 #include <string>
 
+// Cannot use smart pointers in components because they are not trivially copyable and will break the ECS system
 namespace ecs
 {
     struct Layer
@@ -60,13 +61,12 @@ namespace ecs
 
     struct Sprite
     {
-        Texture2D* texture = nullptr;
-		//std::string texture = "default";
-		bool isStatic = false;
+        TexID textureId{ 0 };
 
-		glm::vec2 source = glm::vec2(0);
-		glm::vec2 size = glm::vec2(10);
+		gpu::UVRect uv;
+		glm::vec2 size = glm::vec2(32);
         glm::vec4 color = glm::vec4(1.0f);
+        //To int
         float depth = 1.0f;
 
 		MaterialInstance material = MaterialInstance(Resources::sharedMat("def"));
@@ -79,7 +79,7 @@ namespace ecs
 		float gain = 0.5f;
 		int seed = 1337;
 
-		int width = 1920;
+        int width = 1920;
 		int height = 1080;
 
 		float sunX = 1.1f;

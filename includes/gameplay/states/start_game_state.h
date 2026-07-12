@@ -1,5 +1,5 @@
 #pragma once
-#include "core/game_flow_fsm.h"
+#include "core/fsm/game_flow_fsm.h"
 
 struct StartGameState : IState
 {

@@ -4,7 +4,7 @@
 
 #include <memory>
 
-#include "core/game_flow_fsm.h"
+#include "core/fsm/game_flow_fsm.h"
 #include "core/app_state.h"
 #include "core/context.h"
 
@@ -15,7 +15,7 @@
 #include "ecs/ecs.h"
 #include "editor/editor.h"
 
-class Arena;
+namespace mem { class Arena; }
 
 namespace core
 {
@@ -33,7 +33,7 @@ namespace core
 		std::unique_ptr<GameFlowFSM>	gameFlowFsm = nullptr;
 		std::unique_ptr<editor::Editor> editor = nullptr;
 
-		Arena* arena;
+		mem::Arena* arena;
 	public:
 		Game() = default;
 		Game(int width, int height)

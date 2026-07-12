@@ -86,6 +86,16 @@ namespace core
         {
             return file_util::createPath(assetsDir.string(), fontsDir.string(), defaultFontName + ".ttf");
         }
+
+        fs::path fontDir(const std::string& fontName) const
+        {
+            return file_util::createPath(assetsDir.string(), fontsDir.string(), fontName + ".ttf");
+        }
+
+		fs::path assetDir(const std::string& asssetName, const std::string ext) const
+		{
+			return file_util::createPath(assetsDir.string(), asssetName + "." + ext);
+		}
     };
 
     inline Config GConfig;

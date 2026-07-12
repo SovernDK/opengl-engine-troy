@@ -97,7 +97,7 @@ void editor::WorldMapEditor::render()
 
 	if (id != 0)
 	{
-		auto& settings = game.world->getMut<ecs::MapGenSettings>(id);
+		auto* settings = game.world->getMod<ecs::MapGenSettings>(id);
 
 		settings->frequency = frequency;
 		settings->octaves = octaves;

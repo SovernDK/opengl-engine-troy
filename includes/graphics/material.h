@@ -54,8 +54,8 @@ public:
 	void setTexture(const std::string& name, GLuint id);
 	void setTexture(const std::string& name, TexID id);
 	void addProperty(const std::string& name, Uniform value);
-	void clearProperties();
 	void setProperty(const std::string& name, Uniform value);
+	void clearProperties();
 
 	void bind() const;
 	void unbind() const;

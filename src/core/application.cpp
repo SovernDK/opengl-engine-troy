@@ -8,6 +8,7 @@
 #include <imgui/imgui_impl_opengl3.h>
 
 #include <SDL3_image/SDL_image.h>
+#include <SDL3_mixer/SDL_mixer.h>
 
 #include <iostream>
 #include <glad/glad.h>
@@ -111,6 +112,7 @@ void Application::Quit(void* appState, SDL_AppResult result)
             SDL_DestroyWindow(context->window);
             context->window = nullptr;
             SDL_Log("Window destroyed");
+            MIX_Quit();
         }
 
         delete context;
@@ -123,7 +125,7 @@ void Application::Quit(void* appState, SDL_AppResult result)
 SDL_AppResult Application::initSDL(AppState& context)
 {
     SDL_SetHint(SDL_HINT_IME_IMPLEMENTED_UI, "composition");
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO)) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Couldn't initialize SDL: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
@@ -158,6 +160,12 @@ SDL_AppResult Application::initSDL(AppState& context)
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Couldn't create window: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
+
+	if (!MIX_Init())
+	{
+        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Couldn't init SDL_mixer library: %s", SDL_GetError());
+		return SDL_APP_FAILURE;
+	}
 
     return SDL_APP_CONTINUE;
 }

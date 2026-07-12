@@ -20,7 +20,8 @@
 #include "scenes/clans_list_scene.h"
 #include "scenes/main_menu_scene.h"
 
-MapGeneration buildMapData(const std::shared_ptr<const ecs::MapGenSettings> settings);
+//MapGeneration buildMapData(const std::shared_ptr<const ecs::MapGenSettings> settings);
+MapGeneration buildMapData(const ecs::MapGenSettings* settings);
 void applyMapToWorld(core::Game& game, MapGeneration& mapGen, int w, int h);
 void updateTerrain(core::Game& game);
 void initializeWorld(core::Game& game);
@@ -51,7 +52,7 @@ void WorldMapScene::start(core::IContext* ctx)
 
 	ecs::EntityId id = game.world->entity("Settings").id;
 	assert(id != 0);
-	auto& settings = game.world->get<ecs::MapGenSettings>(id);
+	const auto* settings = game.world->get<ecs::MapGenSettings>(id);
 
 	mapFuture = std::async(std::launch::async, buildMapData, settings);
 }
@@ -69,7 +70,11 @@ void WorldMapScene::update(core::IContext* ctx, float dt)
 			initializeWorld(game);
 			
 			MapGeneration result = mapFuture.get();
-			applyMapToWorld(game, result, 1920, 1080);
+
+			EntityId id = game.world->entity("Settings").id;
+			auto settings = game.world->get<ecs::MapGenSettings>(id);
+
+			applyMapToWorld(game, result, settings->width, settings->height);
 			ServiceLocator::get<ISceneService>()->requestRemoveLast();
 
 			mapReady = true;
@@ -108,13 +113,13 @@ void initializeWorld(core::Game& game)
 
 	// =========== Entities =======================
 	game.world->create("WorldMap")
-		.addComponent<ecs::WorldMap>({})
-		.addComponent<ecs::Sprite>({
+		.add<ecs::WorldMap>({})
+		.add<ecs::Sprite>({
 			.size = glm::vec2(settings->width, settings->height),
 			.depth = 1.0f,
 			.material{ MaterialInstance(Resources::sharedMat("terrain")) },
 			})
-		.addComponent<ecs::Transform2D>({});
+		.add<ecs::Transform2D>({});
 
 	MaterialInstance temp = MaterialInstance(Resources::sharedMat("def"));
 	temp.blendMode = BlendMode::Alpha;
@@ -125,54 +130,54 @@ void initializeWorld(core::Game& game)
 	temp.setTexture("image", tex->ID());
 
 	game.world->create()
-		.addComponent<ecs::Sprite>(ecs::Sprite{
+		.add<ecs::Sprite>(ecs::Sprite{
 				.size = glm::vec2(24),
 				.material = temp
 			})
-		.addComponent<ecs::Transform2D>(ecs::Transform2D{
+		.add<ecs::Transform2D>(ecs::Transform2D{
 				.position = glm::vec3(850, 550, 1.0)
 			})
-		.addComponent<ecs::Settlement>({});
+		.add<ecs::Settlement>({});
 
 	game.world->create()
-		.addComponent<ecs::Sprite>(ecs::Sprite{
+		.add<ecs::Sprite>(ecs::Sprite{
 				.size = glm::vec2(24),
 				.material = temp
 			})
-		.addComponent<ecs::Transform2D>(ecs::Transform2D{
+		.add<ecs::Transform2D>(ecs::Transform2D{
 				.position = glm::vec3(450, 400, 1.0)
 			})
-		.addComponent<ecs::Settlement>({});
+		.add<ecs::Settlement>({});
 
 	// =========== UI =======================
-	auto window = ui->createWindow()
-		.setLocPos(UIAnchor::Top_Center)
-		.setLocSize(0.3f, 0.03f)
-		.setPivot(UIAnchor::Top_Center)
-		.setStyle("topbar")
-		.build("topbar");
+	//auto window = ui->createWindow()
+	//	.setLocPos(UIAnchor::Top_Center)
+	//	.setLocSize(0.3f, 0.03f)
+	//	.setPivot(UIAnchor::Top_Center)
+	//	.setStyle("topbar")
+	//	.build("topbar");
 
-	//Used copy since createButton will go out of scope -> auto& btnTemp becomes null
-	auto btnTemp = ui->createButton()
-		.setLocSize(0.3f, 1.0f)
-		.setParent(window)
-		.setOnClick([&](UIWidget* widget) {})
-		.setKeepAspect(true);
+	////Used copy since createButton will go out of scope -> auto& btnTemp becomes null
+	//auto btnTemp = ui->createButton()
+	//	.setLocSize(0.3f, 1.0f)
+	//	.setParent(window)
+	//	.addOnClick([&](UIWidget* widget) {})
+	//	.setKeepAspect(true);
 
-	auto exitGame = [&](UIWidget* widget)
-	{
-		ServiceLocator::get<ISceneService>()->requestRemoveLast();
-		ServiceLocator::get<ISceneService>()->requestTransition<MainMenuScene>(TransitionMode::Additive);
-	};
+	//auto exitGame = [&](UIWidget* widget)
+	//{
+	//	ServiceLocator::get<ISceneService>()->requestRemoveLast();
+	//	ServiceLocator::get<ISceneService>()->requestTransition<MainMenuScene>(TransitionMode::Additive);
+	//};
 
-	btnTemp.setOnClick(exitGame)
-		.build("clans_btn");
-	btnTemp.build("clans_btn2");
-	btnTemp.build("clans_btn3");
+	//btnTemp.addOnClick(exitGame)
+	//	.build("clans_btn");
+	//btnTemp.build("clans_btn2");
+	//btnTemp.build("clans_btn3");
 }
 
 // Async
-MapGeneration buildMapData(const std::shared_ptr<const ecs::MapGenSettings> settings)
+MapGeneration buildMapData(const ecs::MapGenSettings* settings)
 {
 	MapGeneration mapGen{};
 
@@ -210,10 +215,10 @@ void applyMapToWorld(core::Game& game, MapGeneration& mapGen, int w, int h)
 	Texture2D* waterNormal = Resources::texture("water_normal3");
 	Texture2D* forestNormal = Resources::texture("forest_normal");
 
-	EntityId id = game.world->entity("WorldMap").id;
-	assert(id != 0);
+	Entity& worldMapEntity = game.world->entity("WorldMap");
+	assert(worldMapEntity.id != 0);
 
-	auto& worldMaterial = game.world->getMut<ecs::Sprite>(id)->material;
+	auto& worldMaterial = worldMapEntity.getMod<ecs::Sprite>()->material;
 
 	worldMaterial.blendMode = BlendMode::None;
 
@@ -228,15 +233,16 @@ void applyMapToWorld(core::Game& game, MapGeneration& mapGen, int w, int h)
 
 void updateTerrain(core::Game& game)
 {
-	EntityId settingsId = game.world->entity("Settings").id;
-	EntityId worldMapId = game.world->entity("WorldMap").id;
+	Entity& worldMapEntity = game.world->entity("WorldMap");
+	Entity& settingsEntity = game.world->entity("Settings");
 
-	if (settingsId == 0 || worldMapId == 0)
+	if (worldMapEntity.id == 0 || settingsEntity.id == 0)
 		return;
 
-	auto settings = game.world->get<ecs::MapGenSettings>(settingsId);
-	game.world->getMut<ecs::Sprite>(worldMapId)->size = glm::vec2(settings->width, settings->height);
-	auto& worldMaterial = game.world->getMut<ecs::Sprite>(worldMapId)->material;
+	const auto settings = settingsEntity.get<ecs::MapGenSettings>();
+
+	worldMapEntity.getMod<ecs::Sprite>()->size = glm::vec2(settings->width, settings->height);
+	auto& worldMaterial = worldMapEntity.getMod<ecs::Sprite>()->material;
 
 	float aspectRatio = settings->width / settings->height;
 	worldMaterial.setProperty("aspectRatio", aspectRatio);

@@ -1,36 +1,21 @@
 #pragma once
 #include "rmui/ui.h"
 #include "rmui/ui_widget.h"
+#include "rmui/style/ui_style.h"
 #include "services/service.h"
 #include "utility/id_pool.h"
 
 #include "rmui/factories/ui_factory.h"
+#include "graphics/graphics.h"
 
-#include <unordered_map>
 #include <string>
 #include <memory>
 
 #include <nlohmann/json.hpp>
 #include <rmui/ui_layout.h>
-#include <graphics/graphics.h>
 
 union SDL_Event;
 class Material;
-
-struct StyleComponent
-{
-	std::string name;
-
-	SDL_Color bgColor;
-	SDL_Color hoverColor;
-
-	std::unique_ptr<ILayoutStrategy> layoutStrategy;
-
-	Texture2D* texture;
-
-	bool dropShadow = false;
-	glm::vec2 shadowOffset = glm::vec2(0);
-};
 
 class IUIService : public IService
 {
@@ -39,6 +24,7 @@ public:
 
 	virtual void loadStyles(nlohmann::json data) = 0;
 
+	virtual void init(int width, int height) = 0;
 	virtual void resizeCanvas(int width, int height) = 0;
 	virtual void draw() = 0;
 	virtual void update() = 0;
@@ -46,12 +32,9 @@ public:
 	virtual void handleMouse(glm::vec2 mousePos) = 0;
 	virtual void handleInput(SDL_Event& e) = 0;
 
-	virtual void registerMats(const std::shared_ptr<Material>& material, const std::shared_ptr<Material>& shadow) = 0;
-	virtual void registerMats(Material material, Material shadow) = 0;
-
-	virtual UIWidget* widget(int id) const = 0;
-	virtual UIWidget* widget(std::string handle) const = 0;
-	virtual UIWidget& root() = 0;
+	virtual UIWidget* const widget(int id) const = 0;
+	virtual UIWidget* const widget(std::string handle) const = 0;
+	virtual const UIWidget& root() = 0;
 	virtual int nextId() = 0;
 
 	virtual void destroy(const std::string& handle) = 0;
@@ -77,18 +60,13 @@ class UIService : public IUIService
 private:
 	std::unordered_map<int, std::shared_ptr<UIWidget>> ids;
 	std::unordered_map<std::string, std::shared_ptr<UIWidget>> handles;
+	std::unordered_map<std::string, std::unique_ptr<StyleComponent>> styles;
 
 	std::shared_ptr<UIWidget> m_root = nullptr;
 	UIWidget* focused = nullptr;
 	UIWidget* prevFocused = nullptr;
 
-	std::unique_ptr<MaterialInstance> materialInstance = nullptr;
-	std::unique_ptr<MaterialInstance> shadowInstance   = nullptr;
-
-	std::unordered_map<std::string, std::unique_ptr<StyleComponent>> styles;
-
-	const int submissionStart = 90;
-	int submissionIndex = submissionStart;
+	int submissionIndex = 100;
 	bool isBlocked = false;
 
 	IdPool<int> idPool;
@@ -100,24 +78,40 @@ public:
 
 	void loadStyles(nlohmann::json data) override;
 
+	void init(int width, int height) override;
 	void resizeCanvas(int width, int height) override;
 	void draw() override;
 	void update() override;
 	void handleMouse(glm::vec2 mousePos) override;
 	void handleInput(SDL_Event& e) override;
 
-	void registerMats(const std::shared_ptr<Material>& material, const std::shared_ptr<Material>& shadow) override;
-	void registerMats(Material material, Material shadow) override;
-
 	void destroy(const std::string& handle) override;
 	void destroy(const std::shared_ptr<UIWidget>& widget) override;
 	void destroy(const UIWidget* widget) override;
 
-	UIWidget* widget(int id) const override;
-	UIWidget* widget(std::string handle) const override;
+	UIWidget* const widget(int id) const override;
+	UIWidget* const widget(std::string handle) const override;
 
-	UIWidget& root() override { return *m_root.get(); }
-	int nextId() override { return idPool.getId(); }
+	template<typename TWidget>
+	auto widget(int id) -> const TWidget*
+	{
+		static_assert(std::is_base_of_v<UIWidget, TWidget>,
+			"widget<T> - T type must be derived from UIWidget!");
+
+		return static_cast<TWidget*>(widget(id));
+	}
+
+	template<typename TWidget>
+	auto widget(std::string handle) -> const TWidget*
+	{
+		static_assert(std::is_base_of_v<UIWidget, TWidget>,
+			"widget<T> - T type must be derived from UIWidget!");
+
+		return static_cast<TWidget*>(widget(handle));
+	};
+
+	const UIWidget& root() override { return *m_root.get(); }
+	int nextId() override { return idPool.next(); }
 
 	UIButtonFactory createButton() override { return UIButtonFactory(*this); }
 	UIWindowFactory createWindow() override { return UIWindowFactory(*this); }
@@ -129,8 +123,6 @@ private:
 
 	void initWidget(std::shared_ptr<UIWidget> widget, const std::string& handle, const std::string& style, const std::shared_ptr<UIWidget>& parent) override
 	{
-		widget->matInst = std::make_unique<MaterialInstance>(*materialInstance);
-		widget->shadowInst = std::make_unique<MaterialInstance>(*shadowInstance);
 		widget->style = style;
 
 		if (parent)

@@ -3,13 +3,21 @@
 
 class UIWidget;
 struct UIRect;
+class UILabel;
 struct Margin;
+struct StyleComponent;
 
 struct ILayoutStrategy
 {
-    virtual ~ILayoutStrategy() = default;
+	ILayoutStrategy() = default;
+	ILayoutStrategy(const ILayoutStrategy&) = default;
+	ILayoutStrategy& operator=(const ILayoutStrategy&) = default;
+
+	virtual ~ILayoutStrategy() = default;
+
     virtual UIRect layout(UIWidget& self, const UIRect& parentRect, int index) = 0;
 };
+
 struct HorizontalLayout : ILayoutStrategy
 {
     float spacing = 0;
@@ -18,9 +26,9 @@ struct HorizontalLayout : ILayoutStrategy
     bool expand = false;
     bool fit    = false;
 
-    ~HorizontalLayout() = default;
     UIRect layout(UIWidget& self, const UIRect& parentRect, int index) override;
 };
+
 struct VerticalLayout : ILayoutStrategy
 {
     float spacing = 0;
@@ -29,11 +37,10 @@ struct VerticalLayout : ILayoutStrategy
     bool expand = false;
     bool fit    = false;
 
-    ~VerticalLayout() = default;
     UIRect layout(UIWidget& self, const UIRect& parentRect, int index) override;
 };
+
 struct AbsoluteLayout : ILayoutStrategy
 {
-    ~AbsoluteLayout() = default;
     UIRect layout(UIWidget& self, const UIRect& parentRect, int index) override;
 };

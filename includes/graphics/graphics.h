@@ -1,5 +1,6 @@
 #pragma once
 #include "glm/glm.hpp"
+
 #define TO_GL_COORDS(rect, viewportHeight) glm::vec4(rect.x, viewportHeight - rect.y - rect.w, rect.z, rect.w)
 #define AABB(a, b) gpu::checkAABB(a, b)
 
@@ -14,8 +15,8 @@ namespace gpu
 {
 	struct Vertex
 	{
-		glm::vec3 position;
-		glm::vec2 uv;
+		glm::vec3 position	= glm::vec3(0.0f);
+		glm::vec2 uv		= glm::vec2(0.0f);
 	};
 
 	struct UVRect
@@ -25,7 +26,7 @@ namespace gpu
 			  u1 = 1.0f, 
 			  v1 = 1.0f;
 
-		UVRect() { u0 = v0 = u1 = v1 = 0.0f; }
+		UVRect() = default;
 		UVRect(float v) { u0 = v0 = u1 = v1 = v; }
 		UVRect(float u0, float v0, float u1, float v1) 
 		{ 
@@ -35,16 +36,6 @@ namespace gpu
 			this->v1 = v1;
 		}
 	};
-
-	inline UVRect GetUV(int x, int y, int w, int h, int texW, int texH)
-	{
-		float u0 = x / (float)texW;
-		float v0 = y / (float)texH;
-		float u1 = (x + w) / (float)texW;
-		float v1 = (y + h) / (float)texH;
-
-		return { u0, v0, u1, v1 };
-	}
 
 	inline bool checkAABB(const glm::vec4 a, const glm::vec4 b)
 	{

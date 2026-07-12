@@ -1,6 +1,5 @@
 #pragma once
 #include "graphics/rendering/canvas_2d.h"
-#include "graphics/rendering/renderer.h"
 #include "graphics/material.h"
 #include "graphics/mesh.h"
 
@@ -11,18 +10,31 @@
 #include "utility/utils.h"
 #include "core/profiler.h"
 
+#include <algorithm>
+#include <config.h>
+
 std::shared_ptr<IRenderer> Canvas2D::renderer;
-Arena* Canvas2D::arena;
+mem::Arena* Canvas2D::arena;
 
-glm::vec4 Canvas2D::clip = glm::vec4(0.0f);
-bool Canvas2D::isClipping = false;
-SDL_Color Canvas2D::color = { 255,255,255,255 };
-float Canvas2D::depth = 1.0f;
+glm::vec4 Canvas2D::m_clip		= glm::vec4(0.0f);
+bool Canvas2D::isClipping		= false;
+SDL_Color Canvas2D::m_color		= { 255,255,255,255 };
+float Canvas2D::m_depth			= 1.0f;
+BlendMode Canvas2D::m_blendMode = BlendMode::None;
 
-void Canvas2D::init(std::shared_ptr<IRenderer> rendererPtr, Arena* frameArena)
+#pragma region Public functions
+void Canvas2D::init(std::shared_ptr<IRenderer> rendererPtr, mem::Arena* frameArena)
 {
 	renderer = rendererPtr;
 	arena = frameArena;
+}
+
+void Canvas2D::setInternalResolution(int width, int height)
+{
+	renderer->m_internalWidth = width;
+	renderer->m_internalHeight = height;
+
+	renderer->resize(width, height);
 }
 
 void Canvas2D::drawTest()
@@ -30,203 +42,199 @@ void Canvas2D::drawTest()
 
 }
 
+void Canvas2D::resize(int width, int height)
+{
+	renderer->resize(width, height);
+}
+
+#pragma region Draw Primitives
 void Canvas2D::drawLine(glm::vec2 pointA, glm::vec2 pointB, SDL_Color color, float lineWidth)
 {
 	Primitive prim = PrimitiveFactory::createLine(pointA, pointB);
-	Mesh* mesh = loadToBuffer<Mesh>();
+	Mesh* mesh = loadToArena<Mesh>();
 	mesh->setVerticies(prim.vertices, prim.indices);
 
-	MaterialInstance* mat = loadToBuffer<MaterialInstance>(Resources::sharedMat("primitive"));
-	glm::vec4 mainColor = color::SDLColorToVec4(color);
-	mat->setProperty("mainColor", mainColor);
-
-	renderer->commandBuffer->submit(RenderCommand{
-			.type = CommandType::Line,
-			.depth = 1.0f,
-			.mesh = mesh,
-			.instance = mat,
-			.primitive{
-				.lineWidth = lineWidth
-			}
-		});
+	drawPrimitive(CommandType::Line, mesh, lineWidth);
 }
 
 void Canvas2D::drawRect(glm::vec2 origin, glm::vec2 size, SDL_Color color, float lineWidth)
 {
 	Primitive prim = PrimitiveFactory::createRect(origin, size);
-	Mesh* mesh = loadToBuffer<Mesh>();
+	Mesh* mesh = loadToArena<Mesh>();
 	mesh->setVerticies(prim.vertices, prim.indices);
 
-	MaterialInstance* mat = loadToBuffer<MaterialInstance>(Resources::sharedMat("primitive"));
-	glm::vec4 mainColor = color::SDLColorToVec4(color);
-	mat->setProperty("mainColor", mainColor);
-
-	renderer->commandBuffer->submit(RenderCommand{
-			.type = CommandType::Rect,
-			.depth = 1.0f,
-			.mesh = mesh,
-			.instance = mat,
-			.primitive{
-				.lineWidth = lineWidth
-			}
-		});
+	drawPrimitive(CommandType::Rect, mesh, lineWidth);
 }
 
 void Canvas2D::drawWireRect(glm::vec2 origin, glm::vec2 size, SDL_Color color, float lineWidth)
 {
 	Primitive prim = PrimitiveFactory::createRect(origin, size);
-	Mesh* mesh = loadToBuffer<Mesh>();
+	Mesh* mesh = loadToArena<Mesh>();
 	mesh->setVerticies(prim.vertices, prim.indices);
 
-	MaterialInstance* mat = loadToBuffer<MaterialInstance>(Resources::sharedMat("primitive"));
-	glm::vec4 mainColor = color::SDLColorToVec4(color);
-	mat->setProperty("mainColor", mainColor);
-
-	renderer->commandBuffer->submit(RenderCommand{
-			.type = CommandType::Rect,
-			.depth = 1.0f,
-			.mesh = mesh,
-			.instance = mat,
-			.primitive{
-				.lineWidth = lineWidth
-			}
-		});
+	drawPrimitive(CommandType::Rect, mesh, lineWidth);
 }
 
 void Canvas2D::drawWirePoly(std::vector<glm::vec2> points, SDL_Color color, float lineWidth)
 {
 	Primitive prim = PrimitiveFactory::createPoly(points);
-	Mesh* mesh = loadToBuffer<Mesh>();
+	Mesh* mesh = loadToArena<Mesh>();
 	mesh->setVerticies(prim.vertices, prim.indices);
 
-	MaterialInstance* mat = loadToBuffer<MaterialInstance>(Resources::sharedMat("primitive"));
-
-	glm::vec4 mainColor = color::SDLColorToVec4(color);
-	mat->setProperty("mainColor", mainColor);
-
-	renderer->commandBuffer->submit(RenderCommand{
-			.type = CommandType::Polygon,
-			.depth = 1.0f,
-			.mesh = mesh,
-			.instance = mat,
-			.primitive{
-				.lineWidth = lineWidth
-			}
-		});
+	drawPrimitive(CommandType::Polygon, mesh, lineWidth);
 }
+#pragma endregion
 
 void Canvas2D::drawSprite(ecs::Sprite& sprite, ecs::Transform2D& transform)
 {
-	/*auto texPtr = Resources::texture(sprite.texture);
-	if (!texPtr)
-	{
-		ServiceLocator::get<ILogger>()->error(std::format("Passed expired Texture2D pointer with handle [{}]!", sprite.texture));
-		return;
-	}*/
-
-	Primitive prim = PrimitiveFactory::createQuad();
-	Mesh* mesh = loadToBuffer<Mesh>();
+	Primitive prim = PrimitiveFactory::createQuad(sprite.uv);
+	Mesh* mesh = loadToArena<Mesh>();
 	mesh->setVerticies(prim.vertices, prim.indices);
 
 	glm::mat4 model = transform.model(glm::vec2(sprite.size));
 	sprite.material.setProperty("model", model);
 	sprite.material.setProperty("time", core::Profiler::instance().getElapsedTime());
 
-	drawImage(mesh, &sprite.material);
+	drawMeshWithMaterial(mesh, &sprite.material);
 }
 
-void Canvas2D::drawImage(Mesh* mesh, MaterialInstance* instance)
+void Canvas2D::drawImage(const TexID& texture, glm::vec4 rect, gpu::UVRect& uv)
 {
-	renderer->commandBuffer->submit(RenderCommand{
-		.type = CommandType::Sprite,
-		.depth = depth,
-		.mesh = mesh,
-		.instance = instance,
-		.clip = { 
-			.isClipping = isClipping,
-			.view = clip
-		}
-	});
-}
-
-void Canvas2D::drawImage(const std::string& handle, ecs::Transform2D transform)
-{
-	auto texPtr = Resources::texture(handle);
-	if (!texPtr)
-	{
-		ServiceLocator::get<ILogger>()->error(std::format("Passed expired Texture2D pointer with handle [{}]!", handle));
-		return;
-	}
-
-	float texWidth = texPtr->width;
-	float texHeight = texPtr->height;
-
-	Primitive prim = PrimitiveFactory::createQuad();
-	Mesh* mesh = loadToBuffer<Mesh>();
+	Primitive prim = PrimitiveFactory::createQuad(rect, uv);
+	Mesh* mesh = loadToArena<Mesh>();
 	mesh->setVerticies(prim.vertices, prim.indices);
 
-	MaterialInstance* material = loadToBuffer<MaterialInstance>(Resources::sharedMat("def"));
+	MaterialInstance* material = loadToArena<MaterialInstance>(Resources::sharedMat("def"));
+	material->blendMode = m_blendMode;
 
-	material->blendMode = BlendMode::Alpha;
+	material->setProperty("mainColor", color::SDLColorToVec4(m_color));
 
-	material->setTexture("image", texPtr->ID());
-	material->setProperty("useTexture", true);
-	material->setProperty("mainColor", glm::vec4(1.0f));
-
-	glm::mat4 model = transform.model(texWidth, texHeight);
-	material->setProperty("model", model);
-
-	drawImage(mesh, material);
-}
-
-void Canvas2D::drawQuad(const ecs::Transform2D& transform, glm::vec2 size, MaterialInstance* const mat)
-{
-	Primitive prim = PrimitiveFactory::createQuad();
-	Mesh* mesh = loadToBuffer<Mesh>();
-	mesh->setVerticies(prim.vertices, prim.indices);
-
-	glm::mat4 model = transform.model(glm::vec2(size));
-	mat->setProperty("model", model);
-
-	mat->setProperty("time", core::Profiler::instance().getElapsedTime());
-
-	drawImage(mesh, mat);
+	drawMeshWithMaterial(mesh, material);
 }
 
 void Canvas2D::drawQuad(const glm::vec4& rect, MaterialInstance* const mat)
 {
 	Primitive prim = PrimitiveFactory::createQuad();
-	Mesh* mesh = loadToBuffer<Mesh>();
+	Mesh* mesh = loadToArena<Mesh>();
 	mesh->setVerticies(prim.vertices, prim.indices);
 
 	ecs::Transform2D transform{ .position = glm::vec3(rect.x, rect.y, 0.0f) };
 	glm::mat4 model = transform.model(glm::vec2(rect.z, rect.w));
 	mat->setProperty("model", model);
 
-	drawImage(mesh, mat);
+	drawMeshWithMaterial(mesh, mat);
 }
 
-void Canvas2D::drawText(std::string& text, ecs::Transform2D& transform, int fontSize, SDL_Color color)
+void Canvas2D::drawText(const std::string& text, ecs::Transform2D& transform, const std::string& fontName, int fontSize, SDL_Color color)
 {
-	MaterialInstance* material = loadToBuffer<MaterialInstance>(Resources::sharedMat("ttf"));
+	MaterialInstance* material = loadToArena<MaterialInstance>(Resources::sharedMat("ttf"));
 	material->blendMode = BlendMode::Alpha;
-	auto* font = Resources::font("Magda-Ld4");
-	//material->setTexture("image", font->atlas->id);
-	material->setTexture("image", font->atlasId);
+	auto* font = Resources::font(fontName);
+
+	if (font->texture(fontSize).id == 0)
+		Resources::loadTTFont(core::GConfig.fontDir(fontName), fontSize);
+
+	material->setTexture("image", font->texture(fontSize).id);
 	material->setProperty("mainColor", color::SDLColorToVec4(color));
 
 	renderer->commandBuffer->submit(RenderCommand{
 		.type = CommandType::Text,
-		.depth = depth,
+		.depth = m_depth,
 		.instance = material,
-		._data = TextData {
+		.isClipping = isClipping,
+		.clip = m_clip,
+		.rdata = TextData {
 			.text = text,
 			.fontSize = 14,
 			.origin = transform.position
 		},
-		/*.clip = {
-			.isClipping = isClipping,
-			.view = clip
-		}*/
 	});
 }
+
+glm::vec2 Canvas2D::textSize(const std::string& text, const std::string& fontName, int fontSize)
+{
+	auto l_fontName = fontName;
+	if (l_fontName.empty())
+		l_fontName = core::GConfig.defaultFontName;
+	std::string path = core::GConfig.fontDir(l_fontName).string();
+	auto* font = Resources::font(l_fontName);
+	if (font->texture(fontSize).id == 0)
+		Resources::loadTTFont(path, fontSize);
+
+	glm::vec2 textSize = glm::vec2(0);
+	int upperHeight = 0;
+	int lowerHeight = 0;
+
+	for (auto c = text.begin(); c != text.end(); c++)
+	{
+		Glyph ch = font->glyphs[*c];
+		
+		int advance = ch.advance;
+		textSize.x += (advance >> 6);
+		textSize.y = (ch.size.y > textSize.y) ? ch.size.y : textSize.y;
+	}
+
+	return textSize;
+}
+
+glm::vec2 Canvas2D::textOrigin(const std::string& text, const std::string& fontName, int fontSize)
+{
+	auto l_fontName = fontName;
+	if (l_fontName.empty())
+		l_fontName = core::GConfig.defaultFontName;
+
+	std::string path = core::GConfig.fontDir(l_fontName).string();
+	auto* font = Resources::font(l_fontName);
+	if (font->texture(fontSize).id == 0)
+		Resources::loadTTFont(path, fontSize);
+
+	glm::vec2 origin = glm::vec2(0);
+	int upperHeight = 0;
+	int lowerHeight = 0;
+	
+	for (auto c = text.begin(); c != text.end(); c++)
+	{
+		Glyph ch = font->glyphs[*c];
+		int advance = ch.advance;
+		origin.x += (advance >> 6);
+		upperHeight = (ch.bearing.y > upperHeight) ? ch.bearing.y : upperHeight;
+		lowerHeight = (ch.size.y - ch.bearing.y > lowerHeight) ? ch.size.y - ch.bearing.y : lowerHeight;
+	}
+
+	origin.x = upperHeight;
+	origin.y = lowerHeight;
+
+	return origin;
+}
+#pragma endregion
+
+#pragma region Private functions
+void Canvas2D::drawMeshWithMaterial(Mesh* mesh, MaterialInstance* instance)
+{
+	renderer->commandBuffer->submit(RenderCommand{
+		.type = CommandType::Sprite,
+		.depth = m_depth,
+		.mesh = mesh,
+		.instance = instance,
+		.isClipping = isClipping,
+		.clip = m_clip,
+		});
+}
+
+void Canvas2D::drawPrimitive(CommandType primitiveType, Mesh* mesh, float lineWidth)
+{
+	MaterialInstance* mat = loadToArena<MaterialInstance>(Resources::sharedMat("primitive"));
+	glm::vec4 mainColor = color::SDLColorToVec4(m_color);
+	mat->setProperty("mainColor", mainColor);
+
+	renderer->commandBuffer->submit(RenderCommand{
+			.type = primitiveType,
+			.depth = m_depth,
+			.mesh = mesh,
+			.instance = mat,
+			.rdata = PrimitiveData{
+				.lineWidth = lineWidth
+			}
+		});
+}
+#pragma endregion

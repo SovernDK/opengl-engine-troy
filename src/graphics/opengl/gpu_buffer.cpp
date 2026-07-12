@@ -34,11 +34,6 @@ void GPUBuffer::initBuffer(size_t maxVertices, size_t maxIndices)
         (void*)offsetof(Vertex, uv));
     glEnableVertexAttribArray(1);
 
-    //glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, //uv
-    //    sizeof(Vertex),
-    //    (void*)offsetof(Vertex, uv));
-    //glEnableVertexAttribArray(2);
-
     glBindVertexArray(0);
 }
 

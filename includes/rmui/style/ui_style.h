@@ -1,35 +1,25 @@
 #pragma once
-#include "services/service.h"
-#include "SDL3/SDL.h"
+#include "rmui/ui_layout.h"
 
-#include <unordered_map>
-#include <string>
+struct StyleComponent
+{
+	std::string name = "def";
 
-#include <nlohmann/json.hpp>
+	SDL_Color bgColor = WHITE;
+	SDL_Color hoverColor = WHITE;
 
-//struct StyleComponent
-//{
-//	std::string name;
-//	std::string value;
-//
-//	SDL_Color backgroundColor;
-//};
-//
-//class IUIStyleService : IService
-//{
-//public:
-//	virtual ~IUIStyleService() = default;
-//
-//	virtual void load(nlohmann::json data) = 0;
-//};
-//
-//class UIStyleService : public IUIStyleService
-//{
-//private:
-//	std::unordered_map<std::string, StyleComponent> styles{};
-//public:
-//	UIStyleService() = default;
-//	~UIStyleService();
-//
-//	void load(nlohmann::json data) override;
-//};
+	int fontSize = 24;
+	std::string fontName = "default";
+	SDL_Color fontColor = WHITE;
+	SDL_Color fontHoverColor = RED;
+	TextAlign align = TextAlign::Left;
+	TextVertAlign valign = TextVertAlign::Top;
+
+	std::unique_ptr<ILayoutStrategy>
+		layoutStrategy = nullptr;
+
+	Texture2D* texture = nullptr;
+
+	bool dropShadow = false;
+	glm::vec2 shadowOffset = glm::vec2(0);
+};

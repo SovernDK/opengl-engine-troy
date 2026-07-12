@@ -27,10 +27,11 @@ void LoadingScene::update(core::IContext* ctx, float dt)
 
 void LoadingScene::draw(core::IContext* ctx)
 {
-	Canvas2D::drawImage("loading", ecs::Transform2D {
+	//Change to sprite
+	/*Canvas2D::drawImage("loading", ecs::Transform2D {
 			.scale = glm::vec2(.1f),
 			.rotation = rot,
-		});
+		});*/
 }
 
 void LoadingScene::quit(core::IContext* ctx)

@@ -15,7 +15,6 @@ class IRenderer;
 
 struct PrimitiveData
 {
-	float depth = 0;
 	float lineWidth = 1.0f;
 };
 
@@ -39,23 +38,11 @@ struct RenderCommand
 	float depth					= 0;
 	Mesh* mesh					= nullptr;
 	MaterialInstance* instance	= nullptr;
-	RenderData _data;
+	
+	bool isClipping				= false;
+	glm::vec4 clip				= glm::vec4(0.0f);
 
-	union
-	{
-		struct // PRIMITIVE
-		{
-			float lineWidth = 0;
-
-		} primitive;
-
-		struct //Scissors
-		{
-			bool isClipping = false;
-			glm::vec4 view = glm::vec4(0.0f);
-
-		} clip;
-	};
+	RenderData rdata;
 };
 
 class RenderQueue

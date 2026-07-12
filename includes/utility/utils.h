@@ -138,6 +138,15 @@ namespace color
             	color.a / 255.0f
             );
     }
+
+	inline glm::vec3 SDLColorToVec3(SDL_Color color)
+	{
+		return glm::vec3(
+			color.r / 255.0f,
+			color.g / 255.0f,
+			color.b / 255.0f
+		);
+	}
 }
 
 namespace utils

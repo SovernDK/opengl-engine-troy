@@ -7,7 +7,7 @@
 #include <iostream>
 #include <SDL3/SDL_log.h>
 
-bool OpenGLImpl::init(core::AppState& context, Arena* frameArena)
+bool OpenGLImpl::init(core::AppState& context, mem::Arena* frameArena)
 {
     bool openGlInitialized = openGl(context);
     if (!openGlInitialized)
@@ -68,10 +68,10 @@ bool OpenGLImpl::openGl(core::AppState& context)
     return true;
 }
 
-bool OpenGLImpl::initRenderer(core::AppState& context, Arena* frameArena)
+bool OpenGLImpl::initRenderer(core::AppState& context, mem::Arena* frameArena)
 {
     context.activeRenderer = std::make_shared<OpenGlRenderer>();
-    context.activeRenderer->init();
+    context.activeRenderer->init(context.width, context.height);
 
     Canvas2D::init(context.activeRenderer, frameArena);
 

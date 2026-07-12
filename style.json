@@ -45,12 +45,17 @@
     "defButton": {
         "backgroundColor": "#FDC354",
         "alpha": 255,
+        "hoverColor": "#ffffff",
         "dropShadow": true,
         "shadowOffset": {
             "x": 2,
             "y": 2
         },
-        "hoverColor": "#ffffff"
+
+        "fontName": "default",
+        "fontSize": 64,
+        "fontColor": "#ffffff",
+        "fontHoverColor": "#ff0000"
     },
 
     "defImage": {
@@ -63,6 +68,38 @@
         "backgroundColor": "#ffffff",
         "alpha": 0,
         "hoverColor": "#ffffff",
-        "fontColor": "#ffffff"
+
+        "fontName": "default",
+        "fontSize": 64,
+        "fontOverflow": "shrink",
+        "fontColor": "#000000",
+        "fontHoverColor": "#ff0000"
+    },
+
+    "mm_window": {
+        "backgroundColor": "#ffffff",
+        "alpha": 0,
+        "childrenOrigin": "center",
+        "verticalLayout": {
+            "expand": true,
+            "fit": true,
+            "margin": {
+                "left": 6,
+                "top": 6,
+                "right": 6,
+                "bottom": 6
+            },
+            "spacing": 10
+        }
+    },
+
+    "mm_button": {
+        "backgroundColor": "#ffffff",
+        "alpha": 0,
+        "hoverColor": "#ffffff",
+        "fontName": "Magda-Ld4",
+        "fontSize": 48,
+        "fontColor": "#000000",
+        "fontHoverColor": "#ffffff"
     }
 }

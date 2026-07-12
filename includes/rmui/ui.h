@@ -10,7 +10,7 @@ struct UIRect
 	UIRect()
 	{
 		pos = glm::vec2(0.0f);
-		size = glm::vec2(0.0f);
+		size = glm::vec2(1.0f);
 	}
 
 	template<typename T>

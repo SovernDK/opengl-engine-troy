@@ -2,49 +2,68 @@
 #include "rmui/factories/ui_factory.h"
 
 #include "services/ui_service.h"
-#include <rmui/ui_image.h>
+#include <services/audio_service.h>
 
-std::shared_ptr<UIWindow> UIWindowFactory::build(const std::string& handle)
+std::shared_ptr<UIWidget> UILabelFactory::build(const std::string& handle)
 {
-	auto window = service.create<UIWindow>(handle, m_style, m_parent);
+	auto label = service.create<UIWidget>(handle, m_style, m_parent);
+	label->setLocalRect(localRect);
+	label->setPivot(pivot);
+	
+	label->addComponent<UIText>(UIText{ m_text });
+
+	return label;
+}
+
+std::shared_ptr<UIWidget> UIWindowFactory::build(const std::string& handle)
+{
+	auto window = service.create<UIWidget>(handle, m_style, m_parent);
 	window->setLocalRect(localRect);
 	window->setPivot(pivot);
+
+	window->addComponent<UIBackground>(UIBackground{ bgTexture, false });
+	window->addComponent<UIDropShadow>();
 
 	return window;
 }
 
-std::shared_ptr<UIButton> UIButtonFactory::build(const std::string& handle)
+std::shared_ptr<UIWidget> UIButtonFactory::build(const std::string& handle)
 {
 	auto button = service.create<UIButton>(handle, m_style, m_parent);
 
 	button->setLocalRect(localRect);
 	button->setPivot(pivot);
 
-	auto image = service.create<UIImage>(handle + "_img", "defImage", button);
-	image->textureId = m_image;
-	image->setLocalPosition(UIAnchor::Center);
-	image->setLocalSize(1.0f);
-	image->setPivot(UIAnchor::Center);
-	image->matInst->blendMode = BlendMode::Alpha;
-	image->keepAspectRatio = m_keepAspectRatio;
-	button->image = image.get();
+	button->interactive = true;
+
+	button->addComponent<UIBackground>(UIBackground{ bgTexture, false });
+	button->addComponent<UIDropShadow>();
+
+	button->interaction->addOnEnterHover([&](UIWidget* widget)
+	{
+		ServiceLocator::get<IAudioService>()->playOnce("clip");
+	});
 
 	if (!m_text.empty())
 	{
-		auto label = service.create<UILabel>(handle + "_label", "defText", button);
-		label->setLocalPosition(UIAnchor::Center);
-		label->setLocalSize(1.0f);
-		label->setPivot(UIAnchor::Center);
-		label->matInst->blendMode = BlendMode::Alpha;
-		label->text = m_text;
-		label->hasText = true;
+		auto label = service.create<UIWidget>(handle + "_lbl", m_style, button);
+		label->setLocalRect(UIRect());
+		label->setPivot(UIAnchor::Top_Left);
+
+		label->interactive = true;
+		label->blocking = false;
+
+		label->addComponent<UIText>(UIText{ m_text });
 		button->label = label.get();
+
+		button->interaction->addOnEnterHover([&](UIWidget* widget) { static_cast<UIButton*>(widget)->label->interaction->hovered = true; });
+		button->interaction->addOnExitHover([&](UIWidget* widget) { static_cast<UIButton*>(widget)->label->interaction->hovered = false; });
 	}
-	
-	if(onClick)		 button->interaction->setOnClick(onClick);
-	if(onPressed)	 button->interaction->setOnPressed(onPressed);
-	if(onEnterHover) button->interaction->setOnEnterHover(onEnterHover);
-	if(onExitHover)	 button->interaction->setOnExitHover(onExitHover);
+
+	if(onClick)		 button->interaction->addOnClick(onClick);
+	if(onPressed)	 button->interaction->addOnPressed(onPressed);
+	if(onEnterHover) button->interaction->addOnEnterHover(onEnterHover);
+	if(onExitHover)	 button->interaction->addOnExitHover(onExitHover);
 
 	return button;
 }

@@ -1,15 +1,15 @@
 #pragma once
 #include "services/ui_service.h"
-#include "rmui/ui_window.h"
+#include "rmui/ui_widget.h"
 #include "graphics/material.h"
 #include "utility/utils.h"
 
 #include "services/service_locator.h"
 #include "services/input_service.h"
-#include "rmui/ui_interaction.h"
-#include "rmui/ui_button.h"
 #include "services/log_service.h"
 #include "graphics/graphics.h"
+
+#include "magic_enum/magic_enum.hpp"
 
 #include "graphics/rendering/canvas_2d.h"
 
@@ -31,6 +31,51 @@ void UIService::loadStyles(json data)
 
 		style->bgColor = bgColor;
 		style->hoverColor = hoverColor;
+
+		#pragma region Font
+		if (val.contains("fontName"))
+		{
+			style->fontName = val.value("fontName", "default");
+		}
+
+		if (val.contains("fontSize"))
+		{
+			style->fontSize = val.value("fontSize", 24);
+		}
+
+		if (val.contains("fontColor"))
+		{
+			std::string hexFontColor = val.value("fontColor", "#000000");
+			SDL_Color fontColor = HexToRGBA(hexFontColor, 255);
+
+			style->fontColor = fontColor;
+		}
+
+		if (val.contains("fontHoverColor"))
+		{
+			std::string hexFontHoverColor = val.value("fontHoverColor", "#000000");
+			SDL_Color fontHoverColor = HexToRGBA(hexFontHoverColor, 255);
+
+			style->fontHoverColor = fontHoverColor;
+		}
+
+		if (val.contains("fontOverflow"))
+		{
+			
+		}
+
+		if (val.contains("textAlign"))
+		{
+			std::string textAlign = val.value("textAlign", "left");
+			style->align = magic_enum::enum_cast<TextAlign>(textAlign, magic_enum::case_insensitive).value_or(TextAlign::Left);
+		}
+
+		if (val.contains("vtextAlign"))
+		{
+			std::string vtextAlign = val.value("vtextAlign", "top");
+			style->valign = magic_enum::enum_cast<TextVertAlign>(vtextAlign, magic_enum::case_insensitive).value_or(TextVertAlign::Top);
+		}
+		#pragma endregion
 
 		if (val.contains("horizontalLayout"))
 		{
@@ -96,42 +141,32 @@ void UIService::realizeStyle(UIWidget& widget)
 
 	SDL_Color color = style.bgColor;
 
-	if(widget.interaction) 
-	{
+	if(widget.interaction)
 		color = widget.interaction->hovered ? style.hoverColor : style.bgColor;
-	};
 
-	if (style.dropShadow)
-	{
-		widget.shadowInst->setProperty("mainColor", glm::vec4(glm::vec3(0.0f), 1.0f));
-		widget.shadowInst->setProperty("useTexture", false);
+	widget.material().setProperty("mainColor", color::SDLColorToVec4(color));
 
-		glm::vec4 shadowRect = widget.rect.renderRect() + glm::vec4(style.shadowOffset, 0, 0);
-		Canvas2D::drawQuad(shadowRect, widget.shadowInst.get());
-	}
-
-	widget.matInst->setProperty("mainColor", color::SDLColorToVec4(color));
-
-	if (widget.useTexture)
-	{
-		widget.matInst->setTexture("image", widget.textureId.id);
-		widget.matInst->setProperty("useTexture", true);
-		Canvas2D::drawQuad(widget.rect.renderRect(), widget.matInst.get());
-	}
-	else
-	{
-		widget.matInst->setProperty("useTexture", false);
-		Canvas2D::drawQuad(widget.rect.renderRect(), widget.matInst.get());
-	}
-
-	// Rework to check widget type and move widget specific data there
-	if (widget.hasText)
-	{
-		ecs::Transform2D trans{ .position = glm::vec3(widget.rect.pos, 1.0f) };
-		Canvas2D::drawText(widget.text, trans, 64);
-	}
+	for (auto& comp : widget.components)
+		comp.second->realize(&widget, style);
 
 	Canvas2D::clear();
+}
+
+void UIService::init(int width, int height)
+{
+	canvasWidth = width;
+	canvasHeight = height;
+
+	m_root = std::make_shared<UIWidget>(idPool.next());
+	m_root->rect = UIRect(0, 0, canvasWidth, canvasHeight);
+	m_root->setLocalPosition(0.0f, 0.0f);
+	m_root->setLocalSize(1.0f, 1.0f);
+	m_root->style = "root";
+
+	m_root->addComponent<UIBackground>();
+
+	ids[m_root->id] = m_root;
+	handles["root"] = m_root;
 }
 
 void UIService::resizeCanvas(int width, int height)
@@ -139,18 +174,7 @@ void UIService::resizeCanvas(int width, int height)
 	canvasWidth = width;
 	canvasHeight = height;
 
-	m_root = std::make_shared<UIWidget>();
-	m_root->id = idPool.getId();
-	m_root->rect = UIRect(0, 0, canvasWidth, canvasHeight);
-	m_root->setLocalPosition(0.0f, 0.0f);
-	m_root->setLocalSize(1.0f, 1.0f);
-	m_root->matInst = std::make_unique<MaterialInstance>(*materialInstance);
-	m_root->shadowInst = std::make_unique<MaterialInstance>(*shadowInstance);
-	m_root->style = "root";
-
-	ids[m_root->id] = m_root;
-	handles["root"] = m_root;
-
+	m_root->rect = UIRect(0, 0, width, height);
 	m_root->dirtyUpdate = true;
 }
 
@@ -159,8 +183,7 @@ void UIService::draw()
 	if (!m_root) 
 		return;
 
-	//Add submission index for rendering in proper order
-	submissionIndex = submissionStart;
+	submissionIndex = UI_Z;
 	drawRecursive(m_root.get(), m_root->rect.renderRect());
 	Canvas2D::clear();
 }
@@ -207,34 +230,6 @@ void UIService::handleInput(SDL_Event& e)
 
 }
 
-void UIService::registerMats(const std::shared_ptr<Material>& mat, const std::shared_ptr<Material>& shadowMat)
-{
-	materialInstance = std::make_unique<MaterialInstance>(mat);
-
-	materialInstance->blendMode = BlendMode::Alpha;
-	materialInstance->setProperty("mainColor", glm::vec4(1.0f));
-
-	shadowInstance = std::make_unique<MaterialInstance>(shadowMat);
-
-	shadowInstance->blendMode = BlendMode::Alpha;
-	shadowInstance->setProperty("mainColor", glm::vec4(glm::vec3(0.0f), 1.0f));
-}
-
-void UIService::registerMats(Material mat, Material shadowMat)
-{
-	auto material = std::make_shared<Material>(mat);
-	materialInstance = std::make_unique<MaterialInstance>(material);
-
-	materialInstance->blendMode = BlendMode::Alpha;
-	materialInstance->setProperty("mainColor", glm::vec4(1.0f));
-
-	auto dropShadow = std::make_shared<Material>(shadowMat);
-	shadowInstance = std::make_unique<MaterialInstance>(dropShadow);
-
-	shadowInstance->blendMode = BlendMode::Alpha;
-	shadowInstance->setProperty("mainColor", glm::vec4(glm::vec3(0.0f), 1.0f));
-}
-
 void UIService::drawRecursive(UIWidget* widget, const glm::vec4 parentClip)
 {
 	if (!AABB(widget->rect.renderRect(), m_root->rect.renderRect()))
@@ -269,37 +264,39 @@ void UIService::drawRecursive(UIWidget* widget, const glm::vec4 parentClip)
 	{
 		drawRecursive(child.get(), currentClip);
 	}
+
 	Canvas2D::setClipping(prevClip);
 }
 
-void UIService::updateRecursive(UIWidget* m_root, const UIRect& parentRect, ILayoutStrategy& strategy, int index)
+void UIService::updateRecursive(UIWidget* widget, const UIRect& parentRect, ILayoutStrategy& strategy, int index)
 {
-	m_root->rect = strategy.layout(*m_root, parentRect, index);
-	// This is pointer to base class, since there are different concrete implementations
-	// this may hit performance because of virtual dispatch, be sure to profile it!
-	auto& layoutStrategy = styles[m_root->style]->layoutStrategy;
+	widget->rect = strategy.layout(*widget, parentRect, index);
+	auto* layoutStrategy = styles[widget->style]->layoutStrategy.get();
 
-	m_root->dirtyUpdate = false;
+	for (auto& comp : widget->components)
+		comp.second->update(widget);
+
+	widget->dirtyUpdate = false;
 
 	int childIndex = 0;
-	for (auto& child : m_root->children())
+	for (auto& child : widget->children())
 	{
-		updateRecursive(child.get(), m_root->rect, *layoutStrategy, childIndex);
+		updateRecursive(child.get(), widget->rect, *layoutStrategy, childIndex);
 		childIndex++;
 	}
 }
 
-void UIService::topWidgetAtPos(UIWidget* widget, glm::vec2 pos)
+void UIService::topWidgetAtPos(UIWidget* widget, glm::vec2 mousePos)
 {
 	for(auto& child : widget->children())
 	{
-		topWidgetAtPos(child.get(), pos);
+		topWidgetAtPos(child.get(), mousePos);
 	}
 
 	if (isBlocked)
 		return;
 
-	if(widget->blocking && AABB(widget->rect.renderRect(), glm::vec4(pos, 1, 1)))
+	if(widget->blocking && AABB(widget->rect.renderRect(), glm::vec4(mousePos, 1 , 1)))
 	{
 		focused = widget;
 		isBlocked = true;
@@ -339,7 +336,7 @@ void UIService::destroy(const UIWidget* widget)
 	destroy(widget);
 }
 
-UIWidget* UIService::widget(int id) const
+UIWidget* const UIService::widget(int id) const
 {
 	if (ids.contains(id))
 	{
@@ -350,7 +347,7 @@ UIWidget* UIService::widget(int id) const
 	return nullptr;
 }
 
-UIWidget* UIService::widget(std::string handle) const
+UIWidget* const UIService::widget(std::string handle) const
 {
 	if (handles.contains(handle))
 	{

@@ -2,27 +2,17 @@
 #include "rmui/ui.h"
 #include "rmui/ui_layout.h"
 #include "rmui/ui_widget.h"
+
+#include "services/ui_service.h"
+
 #include <resources.h>
-
-inline void preserveAspectRatio(UIWidget& self, UIRect& rect, const UIRect& parentRect) {
-	float parentAspect = parentRect.size.x / parentRect.size.y;
-	Texture2D* tex = Resources::texture(self.textureId);
-	float aspect = (float)tex->width / (float)tex->height;
-
-	if (parentAspect > aspect)
-	{
-		rect.size.x *= aspect / parentAspect;
-	}
-};
+#include <canvas_2d.h>
 
 UIRect AbsoluteLayout::layout(UIWidget& self, const UIRect& parentRect, int index)
 {
 	UIRect rect{ 0 };
 	rect.pos  = parentRect.pos + self.localRect.pos * parentRect.size;
 	rect.size = self.localRect.size * parentRect.size;
-
-	if (self.useTexture && self.keepAspectRatio)
-		preserveAspectRatio(self, rect, parentRect);
 
 	rect.pos -= self.pivot * rect.size;
 
@@ -44,9 +34,6 @@ UIRect HorizontalLayout::layout(UIWidget& self, const UIRect& parentRect, int in
 		int spacingTotal = spacing / std::max(1, childrenSize - 1);
 		rect.size.x = availableWidth - spacingTotal - margin.right;
 	}
-
-	if (self.useTexture && self.keepAspectRatio)
-		preserveAspectRatio(self, rect, parentRect);
 
 	if (self.parent.expired() || index == 0)
 	{
@@ -80,9 +67,6 @@ UIRect VerticalLayout::layout(UIWidget& self, const UIRect& parentRect, int inde
 		int spacingTotal = spacing / std::max(1, childrenSize - 1);
 		rect.size.y = availableHeight - spacingTotal - margin.bottom;
 	}
-
-	if (self.useTexture && self.keepAspectRatio)
-		preserveAspectRatio(self, rect, parentRect);
 
 	if (self.parent.expired() || index == 0)
 	{

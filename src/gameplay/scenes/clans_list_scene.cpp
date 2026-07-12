@@ -13,7 +13,7 @@ void ClansListScene::start(core::IContext* ctx)
 	core::Game& game = dynamic_cast<core::Game&>(*ctx);
 	auto ui = ServiceLocator::get<IUIService>();
 
-	auto window = ui->createWindow()
+	/*auto window = ui->createWindow()
 		.setLocPos(UIAnchor::Top_Left)
 		.setLocSize(0.2f, 1.0f)
 		.setPivot(UIAnchor::Top_Left)
@@ -27,9 +27,9 @@ void ClansListScene::start(core::IContext* ctx)
 		ui->createButton()
 			.setLocSize(0.1f, 0.3f)
 			.setParent(window)
-			.setOnClick([&](UIWidget* widget) {})
+			.addOnClick([&](UIWidget* widget) {})
 			.build("clan"+ index);
-	});
+	});*/
 }
 
 void ClansListScene::update(core::IContext* ctx, float dt)

@@ -66,10 +66,10 @@ private:
     GLenum wrapping       = GL_REPEAT;
     GLenum mipMap         = GL_NEAREST_MIPMAP_LINEAR;
 
-    GLenum format           = GL_RGBA;
-    GLenum internalFormat   = GL_RGBA;
+	GLenum format = GL_RGBA;
+	GLenum internalFormat = GL_RGBA;
 
-    bool   mipMaps        = true;
+    bool   mipMaps        = false;
     bool   flip           = false;
     bool   wrapAxis[2]    = { true, true };
     float  borderColor[3] = { 1.0f, 1.0f, 1.0f };
@@ -132,16 +132,16 @@ public:
         return *this;
     }
 
-    Texture2D build(unsigned int width, unsigned int height, int channels, unsigned char* data)
-    {
-        Texture2D tex;
-        tex.width = width;
-        tex.height = height;
+    //Texture2D build(unsigned int width, unsigned int height, int channels, unsigned char* data)
+    //{
+    //    Texture2D tex;
+    //    tex.width = width;
+    //    tex.height = height;
 
-        format = (channels == 4) ? GL_RGBA : GL_RGB;
-        upload(tex, data);
-        return tex;
-    }
+    //    format = (channels == 4) ? GL_RGBA : GL_RGB;
+    //    upload(tex, data);
+    //    return tex;
+    //}
 
     // build from raw data
     Texture2D build(unsigned int width, unsigned int height, unsigned char* data)
@@ -154,6 +154,7 @@ public:
         return tex;
     }
 private:
+	//Rework to bind texture in constructor and then just set gl parameters instead of local variables
     void upload(Texture2D& tex, unsigned char* data)
     {
         glGenTextures(1, &tex.id.id);
@@ -167,6 +168,7 @@ private:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filtering);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mipMaps ? mipMap : filtering);
 
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, tex.width, tex.height, 0, format, GL_UNSIGNED_BYTE, data);
         if (mipMaps) glGenerateMipmap(GL_TEXTURE_2D);
     }

@@ -1,70 +1,67 @@
 #pragma once
 #include "graphics/opengl/opengl_renderer.h"
-#include "graphics/opengl/gpu_buffer.h"
+
 #include "graphics/mesh.h"
 #include "graphics/material.h"
 #include "core/profiler.h"
 
-#include <variant>
 #include <graphics/primitive_factory.h>
 #include <resources.h>
 
-void OpenGlRenderer::init()
+OpenGlRenderer::~OpenGlRenderer()
 {
+	delete commandBuffer;
+	delete screenMaterial;
+}
+
+void OpenGlRenderer::init(int screenWidth, int screenHeight)
+{
+	m_screenWidth = screenWidth;
+	m_screenHeight = screenHeight;
+
+	m_internalWidth = screenWidth;
+	m_internalHeight = screenHeight;
+
 	commandBuffer = new RenderQueue();
+	framebuffer.create();
+	framebuffer.attachmentColor(0, m_internalWidth, m_internalHeight);
+
+	auto mesh = PrimitiveFactory::clipSpaceQuad();
+
+	screenBuffer.initBuffer(mesh.vertices.size(), mesh.indices.size());
+	screenBuffer.uploadDynamicData(mesh.vertices, mesh.indices);
 }
 
 void OpenGlRenderer::render(ICamera& camera)
 {
-	setViewport(camera.viewport());
+	if (screenMaterial == nullptr)
+	{
+		screenMaterial = new MaterialInstance(Resources::sharedMat("screen"));
+		screenMaterial->setTexture("screenTexture", framebuffer.colorBuffer());
+	}
+
+	framebuffer.bind();
+	setViewport(0, 0, m_internalWidth, m_internalHeight);
 	clear(camera.bgColor());
 
 	commandBuffer->sort();
+	renderToBuffer(camera);
+	framebuffer.unbind();
 
-	int drawCalls = 0;
-
-	for (auto& cmd : commandBuffer->buffer)
-	{
-		switch (cmd.instance->blendMode)
-		{
-		case BlendMode::None:
-			glDisable(GL_BLEND);
-			break;
-		case BlendMode::Alpha:
-			glEnable(GL_BLEND);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-			break;
-		case BlendMode::Additive:
-			glEnable(GL_BLEND);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-			break;
-		}
-
-		if (cmd.clip.isClipping)
-		{
-			glm::vec4 clip = cmd.clip.view;
-			glEnable(GL_SCISSOR_TEST);
-			glScissor(clip.x, clip.y, clip.z, clip.w);
-		}
-		else glDisable(GL_SCISSOR_TEST);
-
-		if (cmd.type == CommandType::Sprite)
-			renderImage(camera, cmd);
-		else if (cmd.type == CommandType::Text)
-			renderText(camera, cmd);
-		else
-			renderPrimitive(camera, cmd);
-
-		drawCalls++;
-	}
+	//Render to texture
+	setViewport(camera.viewport());
+	clear(0.05f, 0.05f, 0.07f, 1);
+	renderToTexture(*screenMaterial);
 
 	core::Profiler::instance().setDrawCalls(drawCalls);
 	commandBuffer->clear();
+	drawCalls = 0;
 }
 
-void OpenGlRenderer::test()
+/* Used when screen dimensions change */
+void OpenGlRenderer::resize(int width, int height)
 {
-
+	framebuffer.resize(width, height);
 }
 
 void OpenGlRenderer::clear(glm::vec4 color)
@@ -90,6 +87,76 @@ void OpenGlRenderer::setViewport(float x, float y, float z, float w)
 	glViewport(x, y, z, w);
 }
 
+void OpenGlRenderer::renderToBuffer(ICamera& camera)
+{
+	for (auto& cmd : commandBuffer->buffer)
+	{
+		blend(cmd);
+		clip(cmd);
+
+		if (cmd.type == CommandType::Sprite)
+			renderImage(camera, cmd);
+		else if (cmd.type == CommandType::Text)
+			renderText(camera, cmd);
+		else
+			renderPrimitive(camera, cmd);
+
+		drawCalls++;
+	}
+}
+
+void OpenGlRenderer::renderToTexture(MaterialInstance& mat)
+{
+	screenBuffer.startDraw();
+
+	screenMaterial->bind();
+
+	screenBuffer.draw(PrimitiveType::Triangle);
+	screenBuffer.endDraw();
+
+	screenMaterial->unbind();
+}
+
+void OpenGlRenderer::blend(RenderCommand cmd)
+{
+	switch (cmd.instance->blendMode)
+	{
+	case BlendMode::None:
+		glDisable(GL_BLEND);
+		break;
+	case BlendMode::Alpha:
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		break;
+	case BlendMode::Additive:
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+		break;
+	}
+}
+
+void OpenGlRenderer::clip(RenderCommand cmd)
+{
+	if (cmd.isClipping)
+	{
+		glEnable(GL_SCISSOR_TEST);
+
+		float sx = (float)m_internalWidth / (float)m_screenWidth;
+		float sy = (float)m_internalHeight / (float)m_screenHeight;
+
+		float x = cmd.clip.x * sx;
+		float y = cmd.clip.y * sy;
+		float w = cmd.clip.z * sx;
+		float h = cmd.clip.w * sy;
+
+		glScissor((GLint)x, (GLint)y, (GLsizei)w, (GLsizei)h);
+	}
+	else
+	{
+		glDisable(GL_SCISSOR_TEST);
+	}
+}
+
 void OpenGlRenderer::renderImage(ICamera& camera, RenderCommand cmd)
 {
 	GPUBuffer buffer;
@@ -98,7 +165,8 @@ void OpenGlRenderer::renderImage(ICamera& camera, RenderCommand cmd)
 
 	buffer.startDraw();
 
-	cmd.instance->setProperty("projection", camera.projection() * camera.view());
+	cmd.instance->setProperty("projection", camera.projection());
+	cmd.instance->setProperty("view", camera.view());
 	cmd.instance->bind();
 
 	buffer.draw(PrimitiveType::Triangle);
@@ -117,7 +185,7 @@ void OpenGlRenderer::renderPrimitive(ICamera& camera, RenderCommand cmd)
 
 	buffer.startDraw();
 
-	glLineWidth(cmd.primitive.lineWidth);
+	//glLineWidth(cmd.primitive.lineWidth);
 
 	cmd.instance->setProperty("projection", camera.projection() * camera.view());
 	cmd.instance->bind();
@@ -150,7 +218,7 @@ void OpenGlRenderer::renderText(ICamera& camera, RenderCommand cmd)
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	auto& data = std::get<TextData>(cmd._data);
+	auto& data = std::get<TextData>(cmd.rdata);
 	auto mesh = PrimitiveFactory::createQuad();
 
 	float x = data.origin.x;
@@ -161,17 +229,16 @@ void OpenGlRenderer::renderText(ICamera& camera, RenderCommand cmd)
 	buffer.initBuffer(mesh.vertices.size(), mesh.indices.size());
 	buffer.uploadDynamicData(mesh.vertices, mesh.indices);
 
-	cmd.instance->setProperty("projection", camera.projection() * camera.view());
+	cmd.instance->setProperty("projection", camera.projection());
 	cmd.instance->bind();
 
 	buffer.startDraw();
 	
 	auto* font = Resources::font("Magda-Ld4");
 
-	std::string::const_iterator c;
-	for (c = data.text.begin(); c != data.text.end(); c++)
+	for (auto c = data.text.begin(); c != data.text.end(); c++)
 	{
-		Glyph ch = font->_glyphs[*c];
+		Glyph ch = font->glyphs[*c];
 
 		float xpos = x + ch.bearing.x;
 		float ypos = y - ch.bearing.y;

@@ -6,16 +6,24 @@
 #include "services/service_locator.h"
 #include "services/file_service.h"
 #include "services/log_service.h"
+#include "services/audio_service.h"
 
 using namespace std;
 using namespace core;
 
-unordered_map<string, Font>                      Resources::fonts;
-unordered_map<string, shared_ptr<ShaderProgram>> Resources::shaders;
-unordered_map<string, unique_ptr<Texture2D>>     Resources::textures;
-unordered_map<string, shared_ptr<Material>>      Resources::sharedMaterials;
+std::unordered_map<std::string, Font>					   Resources::fonts;
+														   
+std::unordered_map<std::string, shared_ptr<ShaderProgram>> Resources::shaders;
+std::unordered_map<std::string, unique_ptr<Texture2D>>	   Resources::textures;
+std::unordered_map<std::string, shared_ptr<Material>>	   Resources::sharedMaterials;
+														   
+std::unordered_map<std::string, MIX_Audio*>				   Resources::sfx;
+std::unordered_map<std::string, MIX_Audio*>				   Resources::music;
 
-std::weak_ptr<ShaderProgram> Resources::loadShader(const string& vertex, const string& fragment, string name)
+std::string Resources::defaultTexture = "default";
+std::string Resources::defaultMaterial = "default";
+
+std::weak_ptr<ShaderProgram> Resources::loadShader(const string& vertex, const string& fragment, const std::string& name)
 {
     std::shared_ptr<ShaderProgram> shaderProgram = std::make_shared<ShaderProgram>();
     Shader fShader, vShader;
@@ -71,7 +79,7 @@ Texture2D* Resources::saveTexture(Texture2D&& texture, std::string name)
     return textures[name].get();
 }
 
-Texture2D* Resources::loadTexture(const fs::path& path, string name)
+Texture2D* Resources::loadTexture(const fs::path& path, const std::string& name)
 {
     StbiImage img = ServiceLocator::get<IFileService>()->loadFile(path.string(), (int) STBI_rgb_alpha);
 
@@ -82,15 +90,30 @@ Texture2D* Resources::loadTexture(const fs::path& path, string name)
 
     Texture2D texture = TextureBuilder()
         .setFiltering(GL_NEAREST)
-        .setMipMap(GL_NEAREST_MIPMAP_LINEAR)
 		.setWrapping(GL_REPEAT)
 		.setWrapAxis(true, true)
         .setBorderColor(0, 0, 0)
-		.build(img.width, img.height, img.channels, img.data);
+		.build(img.width, img.height, img.data);
 
     ServiceLocator::get<ILogger>()->log(std::format("Loaded texture with handle {}", name.c_str()));
     textures[name] = std::make_unique<Texture2D>(std::move(texture));
     return textures[name].get();
+}
+
+Texture2D* Resources::loadTexture(const fs::path& path, const std::string& name, TextureBuilder& builder)
+{
+	StbiImage img = ServiceLocator::get<IFileService>()->loadFile(path.string(), (int)STBI_rgb_alpha);
+
+	if (!img.check)
+	{
+		return nullptr;
+	}
+
+	Texture2D texture = builder.build(img.width, img.height, img.data);
+
+	ServiceLocator::get<ILogger>()->log(std::format("Loaded texture with handle {}", name.c_str()));
+	textures[name] = std::make_unique<Texture2D>(std::move(texture));
+	return textures[name].get();
 }
 
 Texture2D* Resources::texture(const string& name)
@@ -101,7 +124,7 @@ Texture2D* Resources::texture(const string& name)
     }
 
     ServiceLocator::get<ILogger>()->error(std::format("Couldn't find texture with handle {}", name.c_str()));
-    return textures["default"].get();
+    return textures[defaultTexture].get();
 }
 
 Texture2D* Resources::texture(TexID id)
@@ -112,10 +135,10 @@ Texture2D* Resources::texture(TexID id)
 	});
 
 	ServiceLocator::get<ILogger>()->error(std::format("Couldn't find texture with id {}", id.id));
-	return textures["default"].get();
+	return textures[defaultTexture].get();
 }
 
-bool Resources::loadTTFont(const fs::path path, float fontSize)
+bool Resources::loadTTFont(const fs::path path, int fontSize)
 {
     string fontName = file_util::getNameFromPath(path);
 	
@@ -159,6 +182,7 @@ bool Resources::loadTTFont(const fs::path path, float fontSize)
 
     int atlasWidth = 0;
     int atlasHeight = 0;
+	float padding = 1.0f; // Padding between glyphs in the atlas
 
     for (unsigned char c = 0; c < 128; c++)
     {
@@ -175,9 +199,9 @@ bool Resources::loadTTFont(const fs::path path, float fontSize)
 		glm::vec2 bearing = glm::vec2(glyph->bitmap_left, glyph->bitmap_top);
 		int advance = glyph->advance.x;
 
-		fonts[fontName]._glyphs[c] = Glyph(glyphSize, bearing, advance);
+		fonts[fontName].glyphs[c] = Glyph(glyphSize, bearing, advance);
 
-		atlasWidth += bmp.width;
+		atlasWidth += bmp.width + padding;
 		atlasHeight = std::max(atlasHeight, (int)bmp.rows);
     }
 
@@ -185,12 +209,13 @@ bool Resources::loadTTFont(const fs::path path, float fontSize)
 	unsigned char* buffer = new unsigned char[bufferSize]();
 
 	// pack glyphs
+	// Rework to grid packing algorithm to make better use of space
 	int xOffset = 0;
 	for (unsigned char c = 0; c < 128; c++)
 	{
 		if (FT_Load_Char(face, c, FT_LOAD_RENDER)) continue;
 		auto& bmp = face->glyph->bitmap;
-
+        
 		for (unsigned int row = 0; row < bmp.rows; row++)
 		{
 			auto dst = row * atlasWidth + xOffset;
@@ -199,28 +224,33 @@ bool Resources::loadTTFont(const fs::path path, float fontSize)
 			memcpy(buffer + dst, bmp.buffer + src, bmp.width);
 		}
 
-		fonts[fontName]._glyphs[c].uvs.u0 = (float)xOffset / (float)atlasWidth;
-		fonts[fontName]._glyphs[c].uvs.u1 = (float)(xOffset + bmp.width) / (float)atlasWidth;
-		fonts[fontName]._glyphs[c].uvs.v0 = 0.0f;
-		fonts[fontName]._glyphs[c].uvs.v1 = (float)bmp.rows / (float)atlasHeight;
+		// Add some debug tool to test different fontSizes and see how the UVs are calculated
+		// Reduce by half-pixel to avoid bleeding into neighboring glyphs
+        float offset = 0.5f;
+		fonts[fontName].glyphs[c].uvs.u0 = (float)(xOffset - offset) / (float)atlasWidth;
+		fonts[fontName].glyphs[c].uvs.u1 = (float)(xOffset + bmp.width + offset) / (float)atlasWidth;
+        fonts[fontName].glyphs[c].uvs.v0 = 0.0f;
+		fonts[fontName].glyphs[c].uvs.v1 = (float)(bmp.rows) / (float)atlasHeight;
 
-		xOffset += bmp.width;
+		xOffset += bmp.width + padding;
 	}
 
     Texture2D glyphTexture = TextureBuilder()
 		.setFormat(GL_RED)
 		.setInternalFormat(GL_RED)
         .setFiltering(GL_LINEAR)
-        .setMipMap(GL_LINEAR)
         .setWrapping(GL_CLAMP_TO_EDGE)
         .build(atlasWidth, atlasHeight, buffer);
 
     auto atlasTextureName = fontName + "_" + std::to_string(fontSize);
-	fonts[fontName].atlasId = glyphTexture.id;
+
+	fonts[fontName].atlas.push_back({ fontSize, glyphTexture.id });
 	saveTexture(std::move(glyphTexture), atlasTextureName);
 
-    ServiceLocator::get<ILogger>()->log(CategoryLevel::TTFFont, std::format("Font {} loaded succesfully", fontName).c_str());
+    ServiceLocator::get<ILogger>()->log(CategoryLevel::TTFFont, std::format("Font {} size: {} loaded succesfully", fontName, fontSize).c_str());
     delete[] buffer;
+
+    return true;
 }
 
 Font* Resources::font(const std::string& fontName)
@@ -232,6 +262,52 @@ Font* Resources::font(const std::string& fontName)
 		return &fonts["default"];
     }
     return &fonts[fontName];
+}
+
+MIX_Audio* Resources::loadClip(const std::filesystem::path& path, const std::string& name)
+{
+	char* _path = nullptr;
+
+	SDL_asprintf(&_path, "%s", path.string().c_str());
+	MIX_Audio* audio = MIX_LoadAudio(ServiceLocator::get<IAudioService>()->mixer(), _path, false);
+	if (!audio)
+	{
+		auto msg = std::format("Couldn't open audio file: {}", path.string().c_str());
+		ServiceLocator::get<ILogger>()->error(CategoryLevel::Audio, msg.c_str());
+		SDL_free(_path);
+		return nullptr;
+	}
+	
+	SDL_free(_path);
+
+	auto msg = std::format("Loaded audio clip with handle {}", name.c_str());
+	ServiceLocator::get<ILogger>()->log(CategoryLevel::Audio, msg.c_str());
+
+	sfx[name] = audio;
+	return audio;
+}
+
+MIX_Audio* Resources::loadMusic(const std::filesystem::path& path, const std::string& name)
+{
+	char* _path = nullptr;
+
+	SDL_asprintf(&_path, "%s", path.string().c_str());
+	MIX_Audio* audio = MIX_LoadAudio(ServiceLocator::get<IAudioService>()->mixer(), _path, false);
+	if (!audio)
+	{
+		auto msg = std::format("Couldn't open music file: {}", path.string().c_str());
+		ServiceLocator::get<ILogger>()->error(CategoryLevel::Audio, msg.c_str());
+		SDL_free(_path);
+		return nullptr;
+	}
+
+	SDL_free(_path);
+
+	auto msg = std::format("Loaded music with handle {}", name.c_str());
+	ServiceLocator::get<ILogger>()->log(CategoryLevel::Audio, msg.c_str());
+
+	music[name] = audio;
+	return audio;
 }
 
 void Resources::addSharedMat(const std::string& handle, std::shared_ptr<Material> material)
@@ -246,7 +322,7 @@ std::shared_ptr<Material> Resources::sharedMat(const std::string& handle)
         return sharedMaterials[handle];
     }
 
-    return std::shared_ptr<Material>();
+    return sharedMaterials[defaultMaterial];
 }
 
 Material Resources::copySharedMat(const std::string& handle)

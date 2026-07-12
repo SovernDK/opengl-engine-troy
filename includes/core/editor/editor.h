@@ -18,7 +18,8 @@ namespace editor
 	public:
 		IEditor(core::IContext& ctx) : m_ctx(ctx) {};
 		~IEditor() = default;
-		virtual void update(float dt) = 0;
+		virtual void update(float dt, const ICamera& camera) = 0;
+		virtual void draw() = 0;
 	};
 
 	class Editor : public IEditor
@@ -36,7 +37,8 @@ namespace editor
 		~Editor() = default;
 
 	public:
-		void update(float dt) override;
+		void update(float dt, const ICamera& camera) override; 
+		void draw() override;
 
 		void toolbar(int width, int height, glm::vec2 pos);
 
@@ -52,7 +54,7 @@ namespace editor
 		void stateEditor(std::string currentState);
 
 		void uiTree();
-		void uiNode(UIWidget& widget);
-		void uiInspector();
+		void uiNode(const UIWidget& widget);
+		void uiInspector() const;
 	};
 }

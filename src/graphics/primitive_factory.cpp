@@ -51,6 +51,7 @@ Primitive PrimitiveFactory::createLine(vec2 start, vec2 end)
     return { verts, indices };
 }
 
+#pragma region Simple Rects for primitives
 Primitive PrimitiveFactory::createRect()
 {
     vector<Vertex> verts = {
@@ -87,36 +88,60 @@ Primitive PrimitiveFactory::createRect(glm::vec2 origin, glm::vec2 size)
 
     return { verts, indices };
 }
+#pragma endregion
 
-Primitive PrimitiveFactory::createQuad()
+Primitive PrimitiveFactory::createPoly(std::vector<glm::vec2> points)
+{
+	vector<Vertex> verts;
+	std::vector<GLuint> indices;
+
+	int index = 0;
+	for (int i = 0; i < points.size(); i++)
+	{
+		verts.push_back({ { points[i].x, points[i].y, 1.0f}, {0.0f, 0.0f} });
+	}
+
+	for (int i = 0; i < points.size() - 1; i++)
+	{
+		indices.push_back(i);
+		indices.push_back(i + 1);
+	}
+
+	indices.push_back(points.size() - 1);
+	indices.push_back(0);
+
+	return { verts, indices };
+}
+
+Primitive PrimitiveFactory::clipSpaceQuad()
 {
 	vector<Vertex> verts = {
-		{ { 0.0f, 1.0f, 0.0f }, {0.0f, 1.0f} }, // 0 - top-left
-		{ { 1.0f, 1.0f, 0.0f }, {1.0f, 1.0f} }, // 1 - top-right
-		{ { 1.0f, 0.0f, 0.0f }, {1.0f, 0.0f} }, // 2 - bottom-right
-		{ { 0.0f, 0.0f, 0.0f }, {0.0f, 0.0f} }, // 3 - bottom-left
+		{ { -1.0f,  1.0f, 0.0f }, {0.0f, 1.0f} }, // 0 - top-left
+		{ {  1.0f,  1.0f, 0.0f }, {1.0f, 1.0f} }, // 1 - top-right
+		{ {  1.0f, -1.0f, 0.0f }, {1.0f, 0.0f} }, // 2 - bottom-right
+		{ { -1.0f, -1.0f, 0.0f }, {0.0f, 0.0f} }, // 3 - bottom-left
+	};
+
+	vector<GLuint> indices = {
+		0, 1, 3,
+		1, 2, 3
+	};
+
+	return { verts, indices };
+}
+
+Primitive PrimitiveFactory::createQuad(gpu::UVRect uvs)
+{
+	vector<Vertex> verts = {
+		{ { 0.0f, 1.0f, 0.0f }, {uvs.u0, uvs.v1} }, // 0 - top-left
+		{ { 1.0f, 1.0f, 0.0f }, {uvs.u1, uvs.v1} }, // 1 - top-right
+		{ { 1.0f, 0.0f, 0.0f }, {uvs.u1, uvs.v0} }, // 2 - bottom-right
+		{ { 0.0f, 0.0f, 0.0f }, {uvs.u0, uvs.v0} }, // 3 - bottom-left
 	};
 
     vector<GLuint> indices = {
-        0, 1, 3,   // first triangle
-        1, 2, 3    //second triangle
-    };
-
-    return { verts, indices };
-}
-
-Primitive PrimitiveFactory::createQuad(vec2 topLeft, vec2 topRight, vec2 botRight, vec2 botLeft)
-{
-    vector<Vertex> verts = {
-        { { topLeft.x,  topLeft.y,  0.0f }, {0.0f, 1.0f} }, // 0 - top-left
-        { { topRight.x, topRight.y, 0.0f }, {1.0f, 1.0f} }, // 1 - top-right
-        { { botRight.x, botRight.y, 0.0f }, {1.0f, 0.0f} }, // 2 - bottom-right
-        { { botLeft.x,  botLeft.y,  0.0f }, {0.0f, 0.0f} }, // 3 - bottom-left
-    };
-
-    vector<GLuint> indices = {
-        0, 1, 3,   // first triangle
-        1, 2, 3    //second triangle
+		0, 1, 3,
+		1, 2, 3
     };
 
     return { verts, indices };
@@ -132,32 +157,30 @@ Primitive PrimitiveFactory::createQuad(vec2 topLeft, vec2 topRight, vec2 botRigh
 	};
 
 	vector<GLuint> indices = {
-		0, 1, 3,   // first triangle
-		1, 2, 3    //second triangle
+		0, 1, 3,
+		1, 2, 3 
 	};
 
 	return { verts, indices };
 }
 
-Primitive PrimitiveFactory::createPoly(std::vector<glm::vec2> points)
+Primitive PrimitiveFactory::createQuad(glm::vec4 rect, gpu::UVRect uvs)
 {
-    vector<Vertex> verts;
-    std::vector<GLuint> indices;
+	float x = rect.x;
+	float y = rect.y;
+	float w = rect.z;
+	float h = rect.w;
 
-    int index = 0;
-    for (int i = 0; i < points.size(); i++)
-    {
-        verts.push_back({ { points[i].x, points[i].y, 1.0f}, {0.0f, 0.0f}});
-    }
+	vector<Vertex> verts = {
+		{ { x,     y,       0.0f }, {uvs.u0, uvs.v1} }, // top-left
+		{ { x + w, y,       0.0f }, {uvs.u1, uvs.v1} }, // top-right
+		{ { x + w, y + h,   0.0f }, {uvs.u1, uvs.v0} }, // bottom-right
+		{ { x,     y + h,   0.0f }, {uvs.u0, uvs.v0} }, // bottom-left
+	};
 
-    for (int i = 0; i < points.size() - 1; i++)
-    {
-        indices.push_back(i);
-        indices.push_back(i + 1);
-    }
+	vector<GLuint> indices = {
+		0, 1, 2, 3
+	};
 
-    indices.push_back(points.size() - 1);
-    indices.push_back(0);
-
-    return { verts, indices };
+	return { verts, indices };
 }
